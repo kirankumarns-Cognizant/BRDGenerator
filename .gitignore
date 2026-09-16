@@ -1,0 +1,52 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+*.env
+.env.*
+
+# ── Generated KB data (run bin/ingest.py to rebuild) ─────────────────────────
+kb_store/
+registry/documents.json
+logs/
+pipeline_run.log
+
+# ── KB cache ──────────────────────────────────────────────────────────────────
+KB/cache/
+KB/hitl/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Streamlit ─────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
+
+# ── Test / coverage artifacts ─────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+Sample_Repos/**
+KB/**
+KB_TEST/**

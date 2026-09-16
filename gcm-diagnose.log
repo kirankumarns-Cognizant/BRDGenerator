@@ -1,0 +1,207 @@
+﻿Diagnose log at 2026-09-09T15:28:18Z
+
+AppPath: C:\Program Files\Git\mingw64\bin\git-credential-manager.exe
+InstallDir: C:\Program Files\Git\mingw64\bin\
+Version: 2.6.1+786ab03440ddc82e807a97c0e540f5247e44cec6
+
+------------
+Diagnostic: Environment
+Skipped: False
+Success: True
+Exception: None
+Log:
+OSType: Windows
+OSVersion: 10.0 (build 26100)
+Reading environment variables... OK
+ Variables:
+HOMEPATH=\Users\2408735
+DriverData=C:\Windows\System32\Drivers\DriverData
+COMPUTERNAME=LTIN591176
+GIT_TRACE2_PARENT_SID=4a72b04c-08a9-429b-82a9-2f2a1b06810a
+CommonProgramFiles(x86)=C:\Program Files (x86)\Common Files
+OneDrive=C:\Users\2408735\OneDrive - Cognizant
+PYTHONSTARTUP=c:\Users\2408735\AppData\Roaming\Code\User\workspaceStorage\fb2761a6e4fc369a440539e99f05e618\ms-python.python\pythonrc.py
+PYTHON_BASIC_REPL=1
+BUNDLED_DEBUGPY_PATH=c:\Users\2408735\.vscode\extensions\ms-python.debugpy-2025.18.0-win32-x64\bundled\libs\debugpy
+SESSIONNAME=Console
+PYDEVD_DISABLE_FILE_VALIDATION=1
+TMP=C:\Users\2408735\AppData\Local\Temp
+PROCESSOR_REVISION=ba03
+CLAUDE_CODE_SSE_PORT=34116
+PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.PY;.PYW;.CPL
+USERNAME=2408735
+EFC_30616_1592913036=1
+GIT_ASKPASS=c:\Users\2408735\AppData\Roaming\Code\User\globalStorage\vscode.git\askpass\493597c785d4c5cb\askpass.sh
+GIT_EXEC_PATH=C:/Program Files/Git/mingw64/libexec/git-core
+TEMP=C:\Users\2408735\AppData\Local\Temp
+LOCALAPPDATA=C:\Users\2408735\AppData\Local
+MSYSTEM=MINGW64
+TERM=xterm-256color
+PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 186 Stepping 3, GenuineIntel
+GIT_EDITOR=:
+VSCODE_PYTHON_AUTOACTIVATE_GUARD=1
+COLORTERM=truecolor
+windir=C:\WINDOWS
+USERDNSDOMAIN=cts.com
+USERDOMAIN=CTS
+EFC_30616_2775293581=1
+Path=C:/Program Files/Git/mingw64/libexec/git-core;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin;C:\Users\2408735\bin;c:\Users\2408735\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\debugCommand;c:\Users\2408735\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\copilotCli;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files\Python313\Scripts\;C:\Program Files\Python313\;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\nvm;C:\Program Files\nodejs;C:\ProgramFiles\MySQL\MySQL Shell 8.0\bin;C:\Program Files\Microsoft VS Code\bin;C:\Program Files\Git\cmd;C:\Program Files\nodejs\;C:\Users\2408735\AppData\Local\Microsoft\WindowsApps;C:\Users\2408735\AppData\Local\Programs\Microsoft VS Code\bin;c:\Users\2408735\.vscode\extensions\ms-python.debugpy-2025.18.0-win32-x64\bundled\scripts\noConfigScripts
+TERM_PROGRAM=vscode
+PROCESSOR_LEVEL=6
+NUMBER_OF_PROCESSORS=12
+TMPDIR=C:\Users\2408735\AppData\Local\Temp
+VSCODE_GIT_ASKPASS_EXTRA_ARGS=
+TERM_PROGRAM_VERSION=1.116.0
+VSCODE_GIT_ASKPASS_MAIN=c:\Users\2408735\AppData\Roaming\Code\User\globalStorage\vscode.git\askpass\493597c785d4c5cb\askpass-main.js
+EFC_30616_2946480783=0
+ProgramFiles(x86)=C:\Program Files (x86)
+PUBLIC=C:\Users\Public
+EFC_30616_4126798990=0
+FPS_BROWSER_USER_PROFILE_STRING=Default
+CommonProgramFiles=C:\Program Files (x86)\Common Files
+__PSLockDownPolicy=0
+VSCODE_DEBUGPY_ADAPTER_ENDPOINTS=c:\Users\2408735\.vscode\extensions\ms-python.debugpy-2025.18.0-win32-x64\.noConfigDebugAdapterEndpoints\endpoint-8cb61909258dbd00.txt
+GIT_MERGE_AUTOEDIT=no
+EFC_30616_1262719628=1
+CHROME_CRASHPAD_PIPE_NAME=\\.\pipe\crashpad_26920_FNQEIZODEPPCPDXJ
+PLINK_PROTOCOL=ssh
+ProgramData=C:\ProgramData
+ProgramW6432=C:\Program Files
+GIT_PAGER=cat
+ProgramFiles=C:\Program Files (x86)
+VSCODE_GIT_IPC_HANDLE=\\.\pipe\vscode-git-1fecb93aae-sock
+VSCODE_GIT_ASKPASS_NODE=C:\Program Files\Microsoft VS Code\Code.exe
+EFC_30616_3789132940=1
+SystemRoot=C:\WINDOWS
+NVM_SYMLINK=C:\Program Files\nodejs
+NVM_HOME=C:\Program Files\nvm
+HOME=C:\Users\2408735
+CommonProgramW6432=C:\Program Files\Common Files
+LOGONSERVER=\\LTIN591176
+EFC_30616_344590478=0
+USERDOMAIN_ROAMINGPROFILE=CTS
+APPDATA=C:\Users\2408735\AppData\Roaming
+HOMEDRIVE=C:
+OneDriveCommercial=C:\Users\2408735\OneDrive - Cognizant
+PSModulePath=C:\Users\2408735\OneDrive - Cognizant\Documents\WindowsPowerShell\Modules;C:\Program Files\WindowsPowerShell\Modules;C:\WINDOWS\system32\WindowsPowerShell\v1.0\Modules;C:\Program Files (x86)\Microsoft Azure Information Protection\Powershell
+VSCODE_INJECTION=1
+NEXTHINK=C:\Program Files\Nexthink\Collector
+PROCESSOR_ARCHITEW6432=AMD64
+FPS_BROWSER_APP_PROFILE_STRING=Internet Explorer
+PROCESSOR_ARCHITECTURE=x86
+USERPROFILE=C:\Users\2408735
+OS=Windows_NT
+ComSpec=C:\WINDOWS\system32\cmd.exe
+SystemDrive=C:
+EFC_30616_2283032206=0
+LANG=en_US.UTF-8
+ALLUSERSPROFILE=C:\ProgramData
+
+
+------------
+Diagnostic: File system
+Skipped: False
+Success: True
+Exception: None
+Log:
+Temporary directory is 'C:\Users\2408735\AppData\Local\Temp\'...
+Checking basic file I/O...
+Writing to temporary file 'C:\Users\2408735\AppData\Local\Temp\3c93481caad67a51f57bb7a6'... OK
+Reading from temporary file 'C:\Users\2408735\AppData\Local\Temp\3c93481caad67a51f57bb7a6'... OK
+Deleting temporary file 'C:\Users\2408735\AppData\Local\Temp\3c93481caad67a51f57bb7a6'... OK
+Testing IFileSystem instance...
+UserHomePath: C:\Users\2408735
+UserDataDirectoryPath: C:\Users\2408735\.gcm
+GetCurrentDirectory(): C:\Users\2408735\Downloads\BRD_agent
+
+------------
+Diagnostic: Networking
+Skipped: False
+Success: True
+Exception: None
+Log:
+Checking networking and HTTP stack...
+Creating HTTP client... OK
+IsNetworkAvailable: True
+Sending HEAD request to http://example.com...Sending HEAD request to https://example.com... OK
+ OK
+Acquiring free TCP port... OK
+Testing local HTTP loopback connections...
+Creating new HTTP listener for http://localhost:59818/... OK
+Waiting for loopback connection... OK
+Writing response... OK
+Waiting for response data... OK
+Loopback connection data OK
+
+------------
+Diagnostic: Git
+Skipped: False
+Success: True
+Exception: None
+Log:
+Getting Git version... OK
+Git version is '2.52.0.windows.1'
+Locating current repository...Git repository at 'C:/Users/2408735/Downloads/BRD_agent/.git'
+ OK
+Listing all Git configuration... OK
+Git configuration:
+file:C:/Program Files/Git/etc/gitconfig	diff.astextplain.textconv=astextplain
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.clean=git-lfs clean -- %f
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.smudge=git-lfs smudge -- %f
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.process=git-lfs filter-process
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.required=true
+file:C:/Program Files/Git/etc/gitconfig	http.sslbackend=schannel
+file:C:/Program Files/Git/etc/gitconfig	core.autocrlf=true
+file:C:/Program Files/Git/etc/gitconfig	core.fscache=true
+file:C:/Program Files/Git/etc/gitconfig	core.symlinks=false
+file:C:/Program Files/Git/etc/gitconfig	pull.rebase=false
+file:C:/Program Files/Git/etc/gitconfig	credential.helper=manager
+file:C:/Program Files/Git/etc/gitconfig	credential.https://dev.azure.com.usehttppath=true
+file:C:/Program Files/Git/etc/gitconfig	init.defaultbranch=master
+file:C:/Users/2408735/.gitconfig	user.name=MallaSravani516
+file:C:/Users/2408735/.gitconfig	user.email=malla.sravanijoshna@cognizant.com
+file:.git/config	core.repositoryformatversion=0
+file:.git/config	core.filemode=false
+file:.git/config	core.bare=false
+file:.git/config	core.logallrefupdates=true
+file:.git/config	core.symlinks=false
+file:.git/config	core.ignorecase=true
+file:.git/config	remote.origin.url=https://github.com/KLavanyacog/Brd-agent-hypergraph.git
+file:.git/config	remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*
+
+
+------------
+Diagnostic: Credential storage
+Skipped: False
+Success: True
+Exception: None
+Log:
+ICredentialStore instance is of type: CredentialStore
+Writing test credential... OK
+Reading test credential... OK
+Deleting test credential... OK
+
+------------
+Diagnostic: Microsoft authentication (AAD/MSA)
+Skipped: False
+Success: True
+Exception: None
+Log:
+Broker is not enabled.
+Flow type is: Auto
+Gathering MSAL token cache data... OK
+CacheDirectory: C:\Users\2408735\AppData\Local\.IdentityService
+CacheFileName: msal.cache
+CacheFilePath: C:\Users\2408735\AppData\Local\.IdentityService\msal.cache
+Creating cache helper... OK
+Verifying MSAL token cache persistence... OK
+
+------------
+Diagnostic: GitHub API
+Skipped: False
+Success: True
+Exception: None
+Log:
+Using 'https://github.com/' as API target.
+Querying '/meta' endpoint... OK
+

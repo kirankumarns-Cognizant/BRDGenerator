@@ -1,0 +1,219 @@
+# BRD Pipeline Configuration
+# All paths, thresholds, and tool settings
+
+# Directory paths
+paths:
+  repo_root: "test_repo"                    # Target repository to analyze
+  output_dir: "output"                       # Agent outputs (transient)
+  kb_dir: "KB"                               # JSON artifacts by repo (persistent)
+  kb_store_dir: "kb_store"                   # Vector/RAG store (Agent 9)
+  hitl_pending_dir: "HITL_PENDING"           # Human-in-the-loop review queue
+
+# Confidence thresholds
+thresholds:
+  low_confidence: 0.6                        # Trigger HITL below this
+  minimum_artifact_confidence: 0.7           # Discard below this
+
+# Language Support Configuration
+supported_languages:
+  java:
+    name: "Java"
+    source_extensions: ['.java']
+    config_extensions: ['.xml', '.properties', '.gradle']
+    framework_indicators:
+      - 'pom.xml'
+      - 'build.gradle'
+      - 'settings.gradle'
+    test_patterns: ['**/test/**', '**/*Test.java', '**/*Tests.java']
+    
+  typescript:
+    name: "TypeScript/JavaScript"
+    source_extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']
+    config_extensions: ['.json', '.yaml', '.yml']
+    framework_indicators:
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'webpack.config.js'
+      - 'vite.config.ts'
+      - 'next.config.js'
+    test_patterns: ['**/__tests__/**', '**/*.test.*', '**/*.spec.*']
+    
+  python:
+    name: "Python"
+    source_extensions: ['.py']
+    config_extensions: ['.yaml', '.yml', '.toml', '.ini', '.cfg']
+    framework_indicators:
+      - 'requirements.txt'
+      - 'setup.py'
+      - 'pyproject.toml'
+      - 'Pipfile'
+      - 'poetry.lock'
+    test_patterns: ['**/tests/**', '**/test_*.py', '**/*_test.py']
+    
+  dotnet:
+    name: ".NET (C#/F#)"
+    source_extensions: ['.cs', '.fs', '.vb']
+    config_extensions: ['.config', '.json', '.xml']
+    framework_indicators:
+      - '*.csproj'
+      - '*.fsproj'
+      - '*.sln'
+      - 'appsettings.json'
+    test_patterns: ['**/Tests/**', '**/*.Tests.*', '**/*Test.cs']
+    
+  go:
+    name: "Go"
+    source_extensions: ['.go']
+    config_extensions: ['.yaml', '.yml', '.toml', '.json']
+    framework_indicators:
+      - 'go.mod'
+      - 'go.sum'
+    test_patterns: ['**/*_test.go']
+    
+  rust:
+    name: "Rust"
+    source_extensions: ['.rs']
+    config_extensions: ['.toml']
+    framework_indicators:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    test_patterns: ['**/tests/**', '**/*_test.rs']
+
+# Adapter Retry Configuration
+adapter_retry:
+  max_attempts: 3
+  backoff_multiplier: 2
+  initial_delay_seconds: 1
+  max_delay_seconds: 30
+  retryable_errors:
+    - 'ConnectionError'
+    - 'Timeout'
+    - 'RateLimitError'
+    - 'HTTPError'
+
+# Agent Configuration
+agents:
+  agent1:
+    name: "Discovery & Scoping Agent"
+    tools:
+      - repo_scanner
+      - doc_parser
+      - jira_loader
+      - confluence_loader
+    enabled_tools:
+      repo_scanner: true
+      doc_parser: true
+      jira_loader: false                     # Requires credentials
+      confluence_loader: false               # Requires credentials
+    output_files:
+      - scope_definition.json
+      - artifact_catalog.json
+      - dependency_map.json
+
+  agent2:
+    name: "User Journey Mapping Agent"
+    tools:
+      - code_analyzer
+      - ontology_extractor
+    enabled_tools:
+      code_analyzer: true
+      ontology_extractor: true
+    output_files:
+      - user_journeys.json
+      - touchpoints.json
+
+  agent3:
+    name: "Business Rules Extraction Agent"
+    tools:
+      - code_analyzer
+    enabled_tools:
+      code_analyzer: true
+    output_files:
+      - business_rules.json
+      - validation_logic.json
+
+  agent4:
+    name: "Gap Analysis Agent"
+    tools:
+      - vector_store
+    enabled_tools:
+      vector_store: true
+    output_files:
+      - gap_analysis.json
+      - recommendations.json
+
+  agent5:
+    name: "Synthesis & Requirements Agent"
+    tools: []
+    output_files:
+      - functional_requirements.json
+      - non_functional_requirements.json
+
+  agent6:
+    name: "Acceptance Criteria Agent"
+    tools: []
+    output_files:
+      - acceptance_criteria.json
+      - test_scenarios.json
+
+  agent7:
+    name: "Risk & Dependency Agent"
+    tools:
+      - code_analyzer
+    enabled_tools:
+      code_analyzer: true
+    output_files:
+      - risk_assessment.json
+      - dependency_analysis.json
+
+  agent8:
+    name: "BRD Summarizer & Output Agent"
+    tools: []
+    output_files:
+      - final_brd.md
+      - executive_summary.json
+
+  agent9:
+    name: "KB Store Sync Agent"
+    tools:
+      - vector_store
+    enabled_tools:
+      vector_store: true
+    description: "Ingests KB/{repo_name}/ JSON artifacts into kb_store/ vector database"
+    output_files:
+      - ingestion_log.json
+      - embedding_stats.json
+
+# Tool Adapters
+tool_adapters:
+  repo_scanner: "tools.adapters.gitpython_adapter"
+  doc_parser: "tools.adapters.unstructured_adapter"
+  code_analyzer: "tools.adapters.semgrep_adapter"
+  ontology_extractor: "tools.adapters.tree_sitter_adapter"
+  vector_store: "tools.adapters.chromadb_adapter"
+  jira_loader: "tools.adapters.stub_adapter"
+  confluence_loader: "tools.adapters.stub_adapter"
+
+# HITL Configuration
+hitl:
+  enabled: true
+  triggers:
+    - ambiguous_scope
+    - low_confidence_artifact
+    - conflicting_requirements
+  review_timeout_hours: 48
+
+# Vector Store Configuration (Agent 9)
+vector_store:
+  provider: "chromadb"
+  embedding_model: "all-MiniLM-L6-v2"
+  collection_name: "brd_artifacts"
+  persistence_directory: "kb_store/chromadb"
+  chunk_size: 500
+  chunk_overlap: 50
+
+# Logging
+logging:
+  level: "INFO"
+  log_file: "orchestrator/event_log.json"
+  enable_agent_traces: true

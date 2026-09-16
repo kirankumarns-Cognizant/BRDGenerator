@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Enterprise Hypergraph Viewer</title>
+<script src="vis-network.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#0d1117; color:#c9d1d9; font-family:'Segoe UI','Inter',system-ui,sans-serif; }
+
+/* ── Toolbar ─────────────────────────────────────── */
+#toolbar {
+  height:48px; background:#161b22; border-bottom:1px solid #30363d;
+  display:flex; align-items:center; padding:0 16px; gap:10px; font-size:12px; z-index:20; position:relative;
+}
+#toolbar h1 { font-size:15px; font-weight:700; margin-right:4px; white-space:nowrap; color:#f0f6fc; }
+#toolbar select, #toolbar input {
+  background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:6px; padding:5px 10px; font-size:12px; outline:none;
+}
+#toolbar select:focus, #toolbar input:focus { border-color:#58a6ff; }
+#toolbar button {
+  background:#21262d; color:#c9d1d9; border:1px solid #30363d; border-radius:6px; padding:5px 14px; font-size:12px; cursor:pointer; transition:all .15s;
+}
+#toolbar button:hover { background:#30363d; }
+#toolbar button.on { background:#1f6feb; border-color:#1f6feb; color:#fff; }
+.stats { margin-left:auto; font-size:11px; color:#8b949e; white-space:nowrap; }
+.sep { width:1px; height:24px; background:#30363d; }
+
+/* ── Graph Canvas ────────────────────────────────── */
+#graph { width:100%; height:calc(100vh - 48px); }
+
+/* ── Legend ───────────────────────────────────────── */
+#legend {
+  position:fixed; bottom:12px; left:12px; background:#161b22ee; border:1px solid #30363d; border-radius:8px;
+  padding:12px 16px; font-size:11px; z-index:10; backdrop-filter:blur(8px);
+}
+#legend h4 { margin:0 0 6px; font-size:12px; color:#8b949e; font-weight:600; }
+#legend div { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.diamond { width:10px; height:10px; transform:rotate(45deg); display:inline-block; flex-shrink:0; }
+.hex { width:10px; height:10px; border-radius:2px; display:inline-block; flex-shrink:0; }
+.line { width:20px; height:2px; display:inline-block; flex-shrink:0; }
+.dashed { background:repeating-linear-gradient(90deg,var(--c),var(--c) 4px,transparent 4px,transparent 8px); }
+
+/* ── Detail Panel ────────────────────────────────── */
+#detail {
+  display:none; position:fixed; top:54px; right:12px; width:380px; max-height:calc(100vh - 70px); overflow-y:auto;
+  background:#161b22ee; border:1px solid #30363d; border-radius:10px; padding:16px; font-size:12px;
+  z-index:15; box-shadow:0 8px 32px rgba(0,0,0,0.6); backdrop-filter:blur(8px);
+}
+#detail.show { display:block; }
+#detail h3 { font-size:15px; margin:0 0 10px; color:#f0f6fc; padding-right:24px; }
+#detail .x { position:absolute; top:12px; right:14px; cursor:pointer; color:#8b949e; font-size:18px; line-height:1; }
+#detail .x:hover { color:#f0f6fc; }
+#detail table { width:100%; border-collapse:collapse; margin-bottom:8px; }
+#detail td { padding:4px 6px; border-bottom:1px solid #21262d; vertical-align:top; line-height:1.4; }
+#detail td:first-child { color:#8b949e; width:100px; font-weight:500; }
+#detail pre { margin:0; font-size:10px; white-space:pre-wrap; word-break:break-all; color:#79c0ff; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; margin:2px; }
+.badge-domain { background:#f0883e22; color:#f0883e; border:1px solid #f0883e44; }
+.badge-feature { background:#1f6feb22; color:#58a6ff; border:1px solid #1f6feb44; }
+.badge-artifact { background:#23863622; color:#56d364; border:1px solid #23863644; }
+.badge-entity { background:#a371f722; color:#d2a8ff; border:1px solid #a371f744; }
+.badge-hub { background:#cca70022; color:#e6be00; border:1px solid #cca70044; }
+.conn { padding:5px 0; border-bottom:1px solid #21262d; font-size:11px; line-height:1.5; }
+.conn:last-child { border-bottom:none; }
+.etype { color:#d2a8ff; font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
+.conn-label { color:#c9d1d9; }
+.conn-meta { color:#8b949e; font-size:10px; }
+#conn-header { font-weight:600; margin:10px 0 6px; color:#8b949e; font-size:12px; }
+
+/* ── Minimap (stats panel) ───────────────────────── */
+#minimap {
+  position:fixed; bottom:12px; right:12px; background:#161b22ee; border:1px solid #30363d; border-radius:8px;
+  padding:10px 14px; font-size:11px; z-index:10; backdrop-filter:blur(8px); min-width:160px;
+}
+#minimap h4 { margin:0 0 6px; font-size:12px; color:#8b949e; font-weight:600; }
+#minimap .row { display:flex; justify-content:space-between; margin-bottom:3px; }
+#minimap .val { color:#f0f6fc; font-weight:600; }
+
+/* ── Loading overlay ─────────────────────────────── */
+#loading {
+  position:fixed; top:0; left:0; width:100%; height:100%; background:#0d1117ee; display:flex;
+  align-items:center; justify-content:center; z-index:100; flex-direction:column; gap:12px;
+}
+#loading.hidden { display:none; }
+.spinner { width:32px; height:32px; border:3px solid #30363d; border-top-color:#58a6ff; border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── File drop zone ──────────────────────────────── */
+#dropzone {
+  position:fixed; top:0; left:0; width:100%; height:100%; background:#0d1117ee; display:none;
+  align-items:center; justify-content:center; z-index:50;
+}
+#dropzone.active { display:flex; }
+#dropzone .inner {
+  border:2px dashed #58a6ff; border-radius:16px; padding:40px 60px; text-align:center;
+}
+#dropzone h2 { color:#58a6ff; margin:0 0 8px; }
+#dropzone p { color:#8b949e; margin:0; }
+
+/* scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:#0d1117; }
+::-webkit-scrollbar-thumb { background:#30363d; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#484f58; }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><span style="color:#8b949e">Loading hypergraph...</span></div>
+
+<div id="dropzone">
+  <div class="inner">
+    <h2>Drop hypergraph.json here</h2>
+    <p>Or use the Load button in the toolbar</p>
+  </div>
+</div>
+
+<div id="toolbar">
+  <h1>Enterprise Hypergraph</h1>
+  <span class="sep"></span>
+  <select id="ft" onchange="draw()" title="Node filter">
+    <option value="all">All Nodes</option>
+    <option value="domain">Domains</option>
+    <option value="feature">Features</option>
+    <option value="domain,feature" selected>Domains + Features</option>
+    <option value="entity">Entities</option>
+    <option value="artifact">Artifacts</option>
+    <option value="shared_deps">Shared Patterns (Hub)</option>
+  </select>
+  <select id="fe" onchange="draw()" title="Edge filter">
+    <option value="all">All Edges</option>
+    <option value="belongs_to_domain">belongs_to_domain</option>
+    <option value="has_artifact">has_artifact</option>
+    <option value="derived_from">derived_from</option>
+    <option value="references">references</option>
+    <option value="validates">validates</option>
+    <option value="shares_dependency">shares_dependency</option>
+    <option value="shares_pattern">shares_pattern</option>
+    <option value="entity_relationship">entity_relationship</option>
+    <option value="has_entity">has_entity</option>
+  </select>
+  <input id="q" placeholder="Search nodes or aliases..." oninput="debounce(draw,200)()" style="width:160px" title="Search by label, ID, or alias"/>
+  <span class="sep"></span>
+  <button id="pb" class="on" onclick="togglePhysics()" title="Toggle physics simulation">Physics</button>
+  <button onclick="resetView()" title="Reset all filters">Reset</button>
+  <button onclick="fitView()" title="Fit graph to screen">Fit</button>
+  <button onclick="exportPNG()" title="Export as PNG image">PNG</button>
+  <span class="sep"></span>
+  <label style="font-size:11px;cursor:pointer;color:#8b949e" title="Load a different hypergraph.json file">
+    <input type="file" id="fileInput" accept=".json" style="display:none" onchange="loadFile(event)"/>
+    Load JSON
+  </label>
+  <span class="stats" id="stats"></span>
+</div>
+
+<div id="graph"></div>
+
+<div id="legend">
+  <h4>Node Types</h4>
+  <div><span class="diamond" style="background:#f0883e"></span> Domain</div>
+  <div><span class="dot" style="background:#1f6feb"></span> Feature</div>
+  <div><span class="dot" style="background:#238636"></span> Artifact</div>
+  <div><span class="dot" style="background:#a371f7"></span> Entity</div>
+  <div><span class="hex" style="background:#cca700"></span> Hub (Shared Pattern)</div>
+  <h4 style="margin-top:8px">Edge Types</h4>
+  <div><span class="line" style="background:#8b949e"></span> Structure (belongs_to, has_artifact)</div>
+  <div><span class="line" style="background:#d2a8ff"></span> Lineage (derived, references, validates)</div>
+  <div><span class="line" style="background:#f0883e"></span> Cross-repo (shares_dep, shares_pattern)</div>
+  <div><span class="line" style="background:#a371f7"></span> Entity (has_entity, entity_relationship)</div>
+</div>
+
+<div id="minimap">
+  <h4>Graph Stats</h4>
+  <div id="minimap-content"></div>
+</div>
+
+<div id="detail">
+  <span class="x" onclick="closeDetail()">&times;</span>
+  <h3 id="dt"></h3>
+  <div id="dtype"></div>
+  <table id="dp"></table>
+  <div id="dc"></div>
+</div>
+
+<script>
+/* ================================================================
+   ENTERPRISE HYPERGRAPH VIEWER v2.0
+   Supports both schemas:
+     - Array-based (current TS KB Store): { nodes: [...], edges: [...] }
+     - Object-based (Python KB Store):    { nodes: {id: {...}}, hyperedges: {id: {...}} }
+   ================================================================ */
+
+var D = null;  // Normalized graph data
+var net = null;
+var physics = true;
+var _debounceTimers = {};
+
+/* ── Color & Shape Config ──────────────────────── */
+var NC = {
+  domain:   { bg:'#f0883e', bd:'#d97706', fn:'#fff',    sh:'diamond',  sz:32 },
+  feature:  { bg:'#1f6feb', bd:'#58a6ff', fn:'#fff',    sh:'dot',      sz:24 },
+  artifact: { bg:'#238636', bd:'#56d364', fn:'#c9d1d9', sh:'dot',      sz:10 },
+  entity:   { bg:'#a371f7', bd:'#d2a8ff', fn:'#fff',    sh:'triangle', sz:14 },
+  hub:      { bg:'#cca700', bd:'#e6be00', fn:'#000',    sh:'hexagon',  sz:28 }
+};
+var EC = {
+  belongs_to_domain: '#8b949e',
+  has_artifact:      '#484f58',
+  derived_from:      '#d2a8ff',
+  references:        '#d2a8ff',
+  validates:         '#d2a8ff',
+  shares_dependency: '#f0883e',
+  shares_pattern:    '#f0883e',
+  entity_relationship:'#a371f7',
+  has_entity:        '#a371f766'
+};
+
+/* ── Schema Normalizer ─────────────────────────── */
+function normalize(raw) {
+  var g = { nodes: [], edges: [], hyperedges: [], alias_index: {}, stats: {} };
+
+  // Nodes: handle both array and object formats
+  if (Array.isArray(raw.nodes)) {
+    g.nodes = raw.nodes;
+  } else if (raw.nodes && typeof raw.nodes === 'object') {
+    // Python schema: nodes is an object keyed by node_id
+    for (var k in raw.nodes) {
+      var n = raw.nodes[k];
+      if (!n.id) n.id = n.node_id || k;
+      if (!n.type) n.type = n.is_temp ? 'feature' : guessNodeType(n);
+      if (!n.label) n.label = n.label || k;
+      if (!n.properties) {
+        // Flatten Python fields into properties
+        n.properties = {};
+        var skip = { id:1, node_id:1, type:1, label:1, properties:1 };
+        for (var f in n) { if (!skip[f]) n.properties[f] = n[f]; }
+      }
+      g.nodes.push(n);
+    }
+  }
+
+  // Also pull in temp_nodes (Python schema)
+  if (raw.temp_nodes && typeof raw.temp_nodes === 'object') {
+    for (var tk in raw.temp_nodes) {
+      var tn = raw.temp_nodes[tk];
+      if (!tn.id) tn.id = tn.node_id || tk;
+      tn.type = 'feature';
+      tn.label = (tn.label || tk) + ' [TEMP]';
+      if (!tn.properties) {
+        tn.properties = {};
+        for (var tf in tn) { if (tf !== 'id' && tf !== 'type' && tf !== 'label') tn.properties[tf] = tn[tf]; }
+      }
+      tn.properties._is_temp = true;
+      g.nodes.push(tn);
+    }
+  }
+
+  // Edges: always array
+  g.edges = Array.isArray(raw.edges) ? raw.edges : [];
+
+  // Hyperedges: handle both array and object
+  if (Array.isArray(raw.hyperedges)) {
+    g.hyperedges = raw.hyperedges;
+  } else if (raw.hyperedges && typeof raw.hyperedges === 'object') {
+    for (var ek in raw.hyperedges) {
+      var he = raw.hyperedges[ek];
+      if (!he.id) he.id = he.edge_id || ek;
+      if (!he.node_ids) he.node_ids = he.connects_nodes || [];
+      g.hyperedges.push(he);
+    }
+  }
+
+  // Alias index: always object
+  g.alias_index = raw.alias_index || {};
+
+  // Stats
+  g.stats = raw.stats || {
+    node_count: g.nodes.length,
+    edge_count: g.edges.length,
+    hyperedge_count: g.hyperedges.length
+  };
+
+  return g;
+}
+
+function guessNodeType(n) {
+  if (n.artifact_ids && n.brand) return 'feature';
+  if (n.node_id && n.node_id.indexOf('TEMP_') === 0) return 'feature';
+  var id = (n.id || n.node_id || '').toLowerCase();
+  if (id.indexOf('domain') === 0) return 'domain';
+  if (id.indexOf('entity') === 0) return 'entity';
+  if (id.indexOf('artifact') === 0) return 'artifact';
+  if (id.indexOf('feature') === 0) return 'feature';
+  return 'feature';
+}
+
+/* ── Load & Initialize ─────────────────────────── */
+function initFromEmbedded() {
+  if (typeof GRAPH_DATA !== 'undefined') {
+    D = normalize(GRAPH_DATA);
+    boot();
+  } else {
+    // No embedded data — show drop zone
+    hide('loading');
+    show('dropzone');
+  }
+}
+
+function loadFile(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  show('loading');
+  hide('dropzone');
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var raw = JSON.parse(e.target.result);
+      D = normalize(raw);
+      boot();
+    } catch(err) {
+      alert('Invalid JSON: ' + err.message);
+      hide('loading');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Drag and drop support
+document.addEventListener('dragover', function(e) { e.preventDefault(); show('dropzone'); });
+document.addEventListener('dragleave', function(e) {
+  if (e.relatedTarget === null) hide('dropzone');
+});
+document.addEventListener('drop', function(e) {
+  e.preventDefault();
+  hide('dropzone');
+  var file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.json')) {
+    show('loading');
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        D = normalize(JSON.parse(ev.target.result));
+        boot();
+      } catch(err) { alert('Invalid JSON: ' + err.message); hide('loading'); }
+    };
+    reader.readAsText(file);
+  }
+});
+
+function boot() {
+  updateStats();
+  updateMinimap();
+  draw();
+  hide('loading');
+}
+
+function updateStats() {
+  var types = {};
+  D.nodes.forEach(function(n) { types[n.type] = (types[n.type]||0) + 1; });
+  var parts = [];
+  for (var t in types) parts.push(types[t] + ' ' + t + 's');
+  parts.push(D.edges.length + ' edges');
+  parts.push(D.hyperedges.length + ' hyperedges');
+  el('stats').textContent = parts.join(' | ');
+}
+
+function updateMinimap() {
+  var types = {};
+  D.nodes.forEach(function(n) { types[n.type] = (types[n.type]||0) + 1; });
+  var html = '';
+  var order = ['domain','feature','artifact','entity'];
+  order.forEach(function(t) {
+    if (types[t]) {
+      var c = NC[t] || NC.artifact;
+      html += '<div class="row"><span>' + t.charAt(0).toUpperCase() + t.slice(1) + 's</span><span class="val" style="color:' + c.bg + '">' + types[t] + '</span></div>';
+    }
+  });
+  html += '<div class="row"><span>Edges</span><span class="val">' + D.edges.length + '</span></div>';
+  html += '<div class="row"><span>Hyperedges</span><span class="val">' + D.hyperedges.length + '</span></div>';
+  if (D.alias_index) html += '<div class="row"><span>Aliases</span><span class="val">' + Object.keys(D.alias_index).length + '</span></div>';
+  el('minimap-content').innerHTML = html;
+}
+
+/* ── Draw ──────────────────────────────────────── */
+function draw() {
+  if (!D) return;
+  var tf = el('ft').value;
+  var ef = el('fe').value;
+  var q = (el('q').value || '').toLowerCase().trim();
+
+  if (tf === 'shared_deps') return drawHubView(q);
+
+  // Filter nodes
+  var ns = D.nodes.slice();
+  if (tf !== 'all') {
+    var ts = tf.split(',');
+    ns = ns.filter(function(n) { return ts.indexOf(n.type) >= 0; });
+  }
+  if (q) {
+    var aliasMatches = {};
+    if (D.alias_index) {
+      for (var a in D.alias_index) {
+        if (a.indexOf(q) >= 0) {
+          (D.alias_index[a].nodes || []).forEach(function(id) { aliasMatches[id] = 1; });
+        }
+      }
+    }
+    ns = ns.filter(function(n) {
+      return (n.label || '').toLowerCase().indexOf(q) >= 0
+          || n.id.toLowerCase().indexOf(q) >= 0
+          || aliasMatches[n.id]
+          || matchProperties(n, q);
+    });
+  }
+
+  var idSet = {};
+  ns.forEach(function(n) { idSet[n.id] = 1; });
+
+  // Filter edges
+  var es = D.edges.filter(function(e) { return idSet[e.source] && idSet[e.target]; });
+  if (ef !== 'all') es = es.filter(function(e) { return e.type === ef; });
+
+  // Build vis nodes
+  var vn = ns.map(function(n) {
+    var c = NC[n.type] || NC.artifact;
+    var isTemp = n.properties && n.properties._is_temp;
+    var borderColor = isTemp ? '#da3633' : c.bd;
+    var borderWidth = isTemp ? 3 : 1;
+    return {
+      id: n.id,
+      label: truncate(n.label || n.id, 28),
+      title: buildTooltip(n),
+      color: { background: c.bg, border: borderColor, highlight: { background: c.bg, border: '#fff' } },
+      font: { color: c.fn, size: n.type === 'artifact' ? 8 : (n.type === 'entity' ? 10 : 12) },
+      shape: c.sh,
+      size: c.sz,
+      borderWidth: borderWidth
+    };
+  });
+
+  // Build vis edges
+  var ve = es.map(function(e, i) {
+    var lbl = '';
+    if (e.properties) {
+      lbl = e.properties.pattern_label || e.properties.relationship || '';
+    }
+    var isDashed = e.type === 'has_artifact' || e.type === 'has_entity';
+    return {
+      id: e.id || 'e' + i,
+      from: e.source,
+      to: e.target,
+      color: { color: EC[e.type] || '#484f58', opacity: 0.65 },
+      arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+      title: e.type + (lbl ? ': ' + lbl : ''),
+      label: lbl,
+      font: { color: '#8b949e', size: 8, strokeWidth: 0 },
+      dashes: isDashed ? [4, 4] : false,
+      width: e.type.indexOf('shares') >= 0 ? 2 : 1
+    };
+  });
+
+  render(vn, ve, false);
+}
+
+function drawHubView(q) {
+  var vn = [];
+  var ve = [];
+  var featureIds = {};
+
+  var sharedHE = D.hyperedges.filter(function(h) { return h.type === 'cross_repo_pattern'; });
+  sharedHE.forEach(function(h) { (h.node_ids || []).forEach(function(nid) { featureIds[nid] = 1; }); });
+
+  // Feature nodes
+  D.nodes.forEach(function(n) {
+    if (n.type === 'feature' && featureIds[n.id]) {
+      if (q && (n.label || '').toLowerCase().indexOf(q) < 0 && n.id.toLowerCase().indexOf(q) < 0) return;
+      var c = NC.feature;
+      vn.push({
+        id: n.id, label: n.label || n.id, level: 1, title: buildTooltip(n),
+        color: { background: c.bg, border: c.bd, highlight: { background: c.bg, border: '#fff' } },
+        font: { color: c.fn, size: 12 }, shape: c.sh, size: c.sz
+      });
+    }
+  });
+
+  // Hub nodes
+  sharedHE.forEach(function(h, idx) {
+    var hubId = 'hub_' + idx;
+    var label = h.label || 'Shared Pattern';
+    if (q && label.toLowerCase().indexOf(q) < 0) return;
+    var props = h.properties || {};
+    var repos = props.repos || [];
+    var evidence = props.evidence || {};
+    var conf = props.confidence || '';
+    var c = NC.hub;
+
+    vn.push({
+      id: hubId, label: label, level: 0,
+      color: { background: c.bg, border: c.bd, highlight: { background: c.bg, border: '#fff' } },
+      font: { color: c.fn, size: 11 }, shape: c.sh, size: c.sz,
+      title: label + '\nRepos: ' + repos.join(', ') + '\nConfidence: ' + conf
+    });
+
+    (h.node_ids || []).forEach(function(nid, j) {
+      var repo = '';
+      D.nodes.forEach(function(n) { if (n.id === nid && n.properties) repo = n.properties.repo_name || ''; });
+      var evLabel = repo && evidence[repo] ? evidence[repo] : '';
+      ve.push({
+        id: 'hub_e_' + idx + '_' + j, from: hubId, to: nid,
+        color: { color: '#f0883e', opacity: 0.8 },
+        arrows: { to: { enabled: true, scaleFactor: 0.6 } },
+        title: evLabel || label, label: evLabel || '',
+        font: { color: '#8b949e', size: 9, strokeWidth: 0 }, width: 2
+      });
+    });
+  });
+
+  render(vn, ve, true);
+}
+
+/* ── Render ─────────────────────────────────────── */
+function render(vn, ve, useHierarchy) {
+  var container = el('graph');
+  if (net) { net.destroy(); net = null; }
+
+  var opts = {
+    interaction: { hover: true, tooltipDelay: 150, multiselect: true, navigationButtons: false, keyboard: { enabled: true } },
+    edges: { smooth: { type: 'continuous' }, width: 1.2 }
+  };
+
+  if (useHierarchy) {
+    opts.layout = { hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 160, nodeSpacing: 200, blockShifting: true, edgeMinimization: true } };
+    opts.physics = { enabled: false };
+  } else {
+    opts.layout = { improvedLayout: true };
+    opts.physics = {
+      enabled: physics,
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.012, springLength: 140, springConstant: 0.025, damping: 0.4 },
+      stabilization: { iterations: 200, updateInterval: 25 }
+    };
+  }
+
+  net = new vis.Network(container, { nodes: new vis.DataSet(vn), edges: new vis.DataSet(ve) }, opts);
+  net.once('stabilizationIterationsDone', function() { net.fit({ animation: { duration: 500 } }); });
+  setTimeout(function() { if (net) net.fit(); }, 3000);
+
+  net.on('click', function(params) {
+    if (params.nodes.length > 0) showDetail(params.nodes[0]);
+    else closeDetail();
+  });
+
+  net.on('doubleClick', function(params) {
+    if (params.nodes.length > 0) {
+      // Double-click: zoom to neighborhood
+      var nodeId = params.nodes[0];
+      var neighbors = net.getConnectedNodes(nodeId);
+      neighbors.push(nodeId);
+      net.fit({ nodes: neighbors, animation: { duration: 600 } });
+    }
+  });
+}
+
+/* ── Detail Panel ──────────────────────────────── */
+function showDetail(id) {
+  var n = null;
+  for (var i = 0; i < D.nodes.length; i++) {
+    if (D.nodes[i].id === id) { n = D.nodes[i]; break; }
+  }
+  if (!n) return;
+
+  el('dt').textContent = n.label || n.id;
+
+  // Type badge
+  var typeBadge = '<span class="badge badge-' + n.type + '">' + n.type.toUpperCase() + '</span>';
+  if (n.properties && n.properties._is_temp) {
+    typeBadge += ' <span class="badge" style="background:#da363322;color:#ff7b72;border:1px solid #da363344">TEMP</span>';
+  }
+  el('dtype').innerHTML = typeBadge;
+
+  // Properties table
+  var h = '<tr><td>ID</td><td style="word-break:break-all;font-size:10px;color:#79c0ff">' + esc(n.id) + '</td></tr>';
+  if (n.properties) {
+    var order = ['repo_name','brand','domain','feature','artifact_type','confidence_score','version','entity_type',
+                 'artifact_count','avg_confidence','brd_locked','open_items_count','blocking_gaps','high_risks',
+                 'confidence_breakdown','file_path','description'];
+    var shown = { id:1, type:1, label:1, properties:1, _is_temp:1 };
+
+    // Show ordered fields first
+    order.forEach(function(k) {
+      if (n.properties[k] != null && n.properties[k] !== '' && !shown[k]) {
+        h += propRow(k, n.properties[k]);
+        shown[k] = 1;
+      }
+    });
+
+    // Then remaining fields
+    for (var k in n.properties) {
+      if (!shown[k] && n.properties[k] != null && n.properties[k] !== '' && k.charAt(0) !== '_') {
+        h += propRow(k, n.properties[k]);
+        shown[k] = 1;
+      }
+    }
+
+    // Show artifact count from _llm_artifact_ids
+    if (n.properties._llm_artifact_ids) {
+      h += '<tr><td>LLM artifacts</td><td>' + n.properties._llm_artifact_ids.length + ' artifact(s)</td></tr>';
+    }
+  }
+  el('dp').innerHTML = h;
+
+  // Connections
+  var ce = D.edges.filter(function(e) { return e.source === id || e.target === id; });
+  var ch = '<div id="conn-header">Connections (' + ce.length + ')</div>';
+  ce.forEach(function(e) {
+    var oid = e.source === id ? e.target : e.source;
+    var on = null;
+    for (var j = 0; j < D.nodes.length; j++) { if (D.nodes[j].id === oid) { on = D.nodes[j]; break; } }
+    var ol = on ? (on.label || on.id) : oid;
+    var dir = e.source === id ? ' \u2192 ' : ' \u2190 ';
+    var reason = '';
+    if (e.properties) {
+      if (e.properties.pattern_label) reason = ' <span class="conn-meta">[' + esc(e.properties.pattern_label) + ']</span>';
+      if (e.properties.relationship) reason = ' <span class="conn-meta">[' + esc(e.properties.relationship) + ']</span>';
+      if (e.properties.evidence_src) reason += ' <span class="conn-meta">(' + esc(e.properties.evidence_src) + ')</span>';
+    }
+    ch += '<div class="conn"><span class="etype">' + e.type + '</span><span class="conn-label">' + dir + esc(truncate(ol, 40)) + '</span>' + reason + '</div>';
+  });
+
+  // Also show hyperedges this node participates in
+  var hes = D.hyperedges.filter(function(he) { return (he.node_ids || []).indexOf(id) >= 0; });
+  if (hes.length > 0) {
+    ch += '<div id="conn-header">Hyperedges (' + hes.length + ')</div>';
+    hes.forEach(function(he) {
+      var others = (he.node_ids || []).filter(function(nid) { return nid !== id; });
+      var otherLabels = others.map(function(nid) {
+        for (var j = 0; j < D.nodes.length; j++) { if (D.nodes[j].id === nid) return D.nodes[j].label || nid; }
+        return nid;
+      });
+      ch += '<div class="conn"><span class="etype">' + (he.type || 'hyperedge') + '</span> <span class="conn-label">' + esc(he.label || he.id) + '</span><br/><span class="conn-meta">With: ' + otherLabels.map(esc).join(', ') + '</span></div>';
+    });
+  }
+
+  // Show aliases for this node
+  var nodeAliases = [];
+  if (D.alias_index) {
+    for (var alias in D.alias_index) {
+      if ((D.alias_index[alias].nodes || []).indexOf(id) >= 0) nodeAliases.push(alias);
+    }
+  }
+  if (nodeAliases.length > 0) {
+    ch += '<div id="conn-header">Aliases (' + nodeAliases.length + ')</div>';
+    ch += '<div style="font-size:11px;color:#8b949e;line-height:1.6">' + nodeAliases.map(function(a) { return '<span style="background:#21262d;padding:2px 6px;border-radius:4px;margin:2px;display:inline-block">' + esc(a) + '</span>'; }).join(' ') + '</div>';
+  }
+
+  el('dc').innerHTML = ch;
+  el('detail').classList.add('show');
+}
+
+function closeDetail() { el('detail').classList.remove('show'); }
+
+/* ── Helpers ───────────────────────────────────── */
+function propRow(k, v) {
+  var label = k.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  var val;
+  if (typeof v === 'object') {
+    val = '<pre>' + JSON.stringify(v, null, 1) + '</pre>';
+  } else if (typeof v === 'boolean') {
+    val = v ? '<span style="color:#56d364">Yes</span>' : '<span style="color:#8b949e">No</span>';
+  } else {
+    val = esc(String(v));
+  }
+  return '<tr><td>' + esc(label) + '</td><td>' + val + '</td></tr>';
+}
+
+function buildTooltip(n) {
+  var parts = [n.label || n.id, 'Type: ' + n.type];
+  if (n.properties) {
+    if (n.properties.repo_name) parts.push('Repo: ' + n.properties.repo_name);
+    if (n.properties.domain) parts.push('Domain: ' + n.properties.domain);
+    if (n.properties.artifact_count) parts.push('Artifacts: ' + n.properties.artifact_count);
+    if (n.properties.confidence_breakdown && n.properties.confidence_breakdown.overall != null) {
+      parts.push('Confidence: ' + (n.properties.confidence_breakdown.overall * 100).toFixed(0) + '%');
+    }
+    if (n.properties._is_temp) parts.push('STATUS: TEMP (pending review)');
+  }
+  return parts.join('\n');
+}
+
+function matchProperties(n, q) {
+  if (!n.properties) return false;
+  var s = JSON.stringify(n.properties).toLowerCase();
+  return s.indexOf(q) >= 0;
+}
+
+function truncate(s, len) { return s.length > len ? s.substring(0, len) + '...' : s; }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function el(id) { return document.getElementById(id); }
+function show(id) { var e = el(id); if (e) e.classList.remove('hidden'); if (e && id === 'dropzone') e.classList.add('active'); }
+function hide(id) { var e = el(id); if (e) e.classList.add('hidden'); if (e && id === 'dropzone') e.classList.remove('active'); }
+
+function togglePhysics() {
+  physics = !physics;
+  el('pb').classList.toggle('on', physics);
+  if (net) net.setOptions({ physics: { enabled: physics } });
+}
+
+function resetView() {
+  el('ft').value = 'domain,feature';
+  el('fe').value = 'all';
+  el('q').value = '';
+  draw();
+}
+
+function fitView() { if (net) net.fit({ animation: { duration: 500 } }); }
+
+function exportPNG() {
+  if (!net) return;
+  var canvas = el('graph').querySelector('canvas');
+  if (canvas) {
+    var link = document.createElement('a');
+    link.download = 'hypergraph-' + new Date().toISOString().slice(0,10) + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+}
+
+function debounce(fn, ms) {
+  var key = fn.toString().slice(0, 30);
+  return function() {
+    clearTimeout(_debounceTimers[key]);
+    _debounceTimers[key] = setTimeout(fn, ms);
+  };
+}
+
+/* ── Bootstrap ─────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', initFromEmbedded);
+</script>
+</body>
+</html>

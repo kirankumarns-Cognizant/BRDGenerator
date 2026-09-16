@@ -1,0 +1,30 @@
+# kb_gen — KB Store & RAG Configuration
+# Place this file at the project root or set KB_GEN_CONFIG_PATH env var.
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+kb_root: KB
+registry_path: registry/documents.json
+embeddings_db_path: kb_store
+graph_path: KB/graph/hypergraph.json
+ingestion_progress_path: logs/ingestion_progress.json
+
+# ── LLM ────────────────────────────────────────────────────────────────────────
+anthropic_model: claude-haiku-4-5-20251001
+embedding_model: all-MiniLM-L6-v2
+embedding_dimensions: 384
+
+# ── BRD Chunking ───────────────────────────────────────────────────────────────
+brd_chunk_max_chars: 1400
+brd_chunk_overlap_chars: 180
+brd_chunk_max_per_document: 5000
+
+# ── JSON Ingestion ─────────────────────────────────────────────────────────────
+json_ingestion_enabled: true
+json_included_files: []   # empty = include all .json files
+
+# ── RAG Pipeline ───────────────────────────────────────────────────────────────
+top_k_sources: 5
+use_graph_expansion: true
+strict_grounded: true
+use_brute_force_threshold: 0.3
+# Set env var KB_STORE_ENABLE_RERANKER=true to enable BAAI/bge-reranker-base

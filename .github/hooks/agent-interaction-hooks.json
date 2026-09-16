@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "pre_agent_execution": {
+      "enabled": true,
+      "script": ".github/hooks/log-agent-interaction.ps1",
+      "description": "Logs agent execution start with timestamp and context"
+    },
+    "post_agent_execution": {
+      "enabled": true,
+      "script": ".github/hooks/log-agent-interaction.ps1",
+      "description": "Logs agent execution completion with results and metrics"
+    },
+    "pre_tool_execution": {
+      "enabled": true,
+      "script": ".github/hooks/pretool-mcp-policy.ps1",
+      "description": "Enforces MCP policy and tool usage constraints before tool execution"
+    },
+    "on_hitl_trigger": {
+      "enabled": true,
+      "script": ".github/hooks/log-agent-interaction.ps1",
+      "description": "Logs HITL interactions for audit trail"
+    },
+    "on_error": {
+      "enabled": true,
+      "script": ".github/hooks/log-agent-interaction.ps1",
+      "description": "Logs errors and exceptions for debugging"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2026-08-12",
+    "description": "Agent interaction hooks for BRD Pipeline orchestration"
+  }
+}

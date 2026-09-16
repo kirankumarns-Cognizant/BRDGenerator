@@ -1,0 +1,17 @@
+[client]
+toolbarMode = "viewer"
+showErrorDetails = false
+
+[runner]
+magicEnabled = true
+
+[logger]
+level = "error"
+
+[theme]
+base = "dark"
+primaryColor = "#f0883e"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+font = "sans serif"
