@@ -50,3 +50,5 @@ htmlcov/
 Sample_Repos/**
 KB/**
 KB_TEST/**
+output/**
+**.log

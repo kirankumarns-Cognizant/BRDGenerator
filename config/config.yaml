@@ -1,6 +1,46 @@
 # BRD Pipeline Configuration
 # All paths, thresholds, and tool settings
 
+# Multi-Provider LLM Fallback Chain Configuration
+# Priority: Claude API → OpenAI → Gemini → GitHub Copilot → Claude Code → Static Analysis
+# Each provider checked for API key availability - first available is used
+# VS Code extensions (GitHub Copilot, Claude Code) require NO API KEY
+multi_provider_llm:
+  enabled: true                              # Enable multi-provider fallback
+  auto_fallback: true                        # Automatically fallback to next provider if current fails
+  fallback_priority:                         # Priority order for provider selection
+    - "anthropic"                            # Claude API (requires ANTHROPIC_API_KEY)
+    - "openai"                               # GPT-4/GPT-3.5 (requires OPENAI_API_KEY)
+    - "gemini"                               # Google Gemini (requires GOOGLE_API_KEY)
+    - "github_copilot"                       # GitHub Copilot Chat (NO API KEY - requires gh auth)
+    - "claude_code"                          # Claude Code VS Code Extension (NO API KEY)
+    - "static"                               # Static analysis fallback (always available)
+  
+  # Provider-specific settings
+  providers:
+    anthropic:
+      name: "Claude API"
+      api_key_env: "ANTHROPIC_API_KEY"
+      supports_no_key: false                 # Requires API key
+    openai:
+      name: "OpenAI (GPT)"
+      api_key_env: "OPENAI_API_KEY"
+      supports_no_key: false                 # Requires API key
+    gemini:
+      name: "Google Gemini"
+      api_key_env: "GOOGLE_API_KEY"
+      supports_no_key: false                 # Requires API key
+    github_copilot:
+      name: "GitHub Copilot Chat"
+      api_key_env: null                      # No API key needed
+      supports_no_key: true                  # Works with gh CLI auth only
+      cli_command: "gh auth status"          # Check availability
+    claude_code:
+      name: "Claude Code (VS Code)"
+      api_key_env: null                      # No API key needed
+      supports_no_key: true                  # Works via VS Code extension
+      cli_command: "code --list-extensions"  # Check availability
+
 # Directory paths
 paths:
   repo_root: "test_repo"                    # Target repository to analyze
@@ -91,10 +131,237 @@ adapter_retry:
     - 'RateLimitError'
     - 'HTTPError'
 
+# LLM Configuration - Multi-Provider Smart Model Selection by Task Complexity
+llm:
+  # Global provider settings (can override per-agent)
+  default_provider: "anthropic"              # or "openai"
+  timeout_seconds: 60
+  retry_attempts: 3
+  
+  # Provider API Key Environment Variables
+  providers:
+    anthropic:
+      api_key_env: "ANTHROPIC_API_KEY"
+      available_models:
+        # Claude 3 Family
+        - id: "claude-3-opus"
+          display: "Claude 3 Opus (Most Capable)"
+          input_cost_per_mtok: 0.015          # $15 per million input tokens
+          output_cost_per_mtok: 0.075         # $75 per million output tokens
+          max_tokens: 200000
+          best_for: "Complex reasoning, synthesis, document writing"
+          
+        - id: "claude-3-sonnet"
+          display: "Claude 3 Sonnet (Balanced)"
+          input_cost_per_mtok: 0.003          # $3 per million input tokens
+          output_cost_per_mtok: 0.015         # $15 per million output tokens
+          max_tokens: 200000
+          best_for: "Medium complexity, strategic analysis"
+          
+        - id: "claude-3-haiku"
+          display: "Claude 3 Haiku (Fast & Cheap)"
+          input_cost_per_mtok: 0.00025        # $0.25 per million input tokens
+          output_cost_per_mtok: 0.00125       # $1.25 per million output tokens
+          max_tokens: 200000
+          best_for: "Simple pattern matching, templates"
+        
+        # Claude 3.5 Family
+        - id: "claude-3.5-sonnet"
+          display: "Claude 3.5 Sonnet (Enhanced Balanced)"
+          input_cost_per_mtok: 0.003          # $3 per million input tokens
+          output_cost_per_mtok: 0.015         # $15 per million output tokens
+          max_tokens: 200000
+          best_for: "Medium complexity, latest model"
+          
+        - id: "claude-3.5-haiku"
+          display: "Claude 3.5 Haiku (Enhanced Fast)"
+          input_cost_per_mtok: 0.00080        # $0.80 per million input tokens
+          output_cost_per_mtok: 0.0040        # $4 per million output tokens
+          max_tokens: 200000
+          best_for: "Fast processing with enhanced capabilities"
+        
+        # Claude 4 Family (if available)
+        - id: "claude-4-opus"
+          display: "Claude 4 Opus (Most Advanced)"
+          input_cost_per_mtok: 0.025          # $25 per million input tokens
+          output_cost_per_mtok: 0.100         # $100 per million output tokens
+          max_tokens: 200000
+          best_for: "Most complex reasoning, next-generation capabilities"
+          
+        - id: "claude-4-sonnet"
+          display: "Claude 4 Sonnet (Advanced Balanced)"
+          input_cost_per_mtok: 0.006          # $6 per million input tokens
+          output_cost_per_mtok: 0.024         # $24 per million output tokens
+          max_tokens: 200000
+          best_for: "Advanced reasoning with balance"
+          
+        # Claude 5 Family (if available)
+        - id: "claude-5-opus"
+          display: "Claude 5 Opus (Latest Generation)"
+          input_cost_per_mtok: 0.030          # $30 per million input tokens
+          output_cost_per_mtok: 0.120         # $120 per million output tokens
+          max_tokens: 200000
+          best_for: "Latest generation for cutting-edge reasoning"
+          
+        - id: "claude-5-sonnet"
+          display: "Claude 5 Sonnet (Latest Balanced)"
+          input_cost_per_mtok: 0.008          # $8 per million input tokens
+          output_cost_per_mtok: 0.032         # $32 per million output tokens
+          max_tokens: 200000
+          best_for: "Latest generation balanced model"
+          
+        - id: "claude-5-haiku"
+          display: "Claude 5 Haiku (Latest Fast)"
+          input_cost_per_mtok: 0.0012         # $1.20 per million input tokens
+          output_cost_per_mtok: 0.0060        # $6 per million output tokens
+          max_tokens: 200000
+          best_for: "Latest generation fast processing"
+    
+    openai:
+      api_key_env: "OPENAI_API_KEY"
+      available_models:
+        - id: "gpt-4-turbo"
+          display: "GPT-4 Turbo (Latest)"
+          input_cost_per_mtok: 0.01           # $10 per million input tokens
+          output_cost_per_mtok: 0.03          # $30 per million output tokens
+          max_tokens: 128000
+          best_for: "Complex reasoning, alternative to opus"
+          
+        - id: "gpt-4-turbo-preview"
+          display: "GPT-4 Turbo Preview"
+          input_cost_per_mtok: 0.01           # $10 per million input tokens
+          output_cost_per_mtok: 0.03          # $30 per million output tokens
+          max_tokens: 128000
+          best_for: "Advanced preview features"
+          
+        - id: "gpt-4"
+          display: "GPT-4 (Original)"
+          input_cost_per_mtok: 0.03           # $30 per million input tokens
+          output_cost_per_mtok: 0.06          # $60 per million output tokens
+          max_tokens: 8192
+          best_for: "High-quality reasoning"
+          
+        - id: "gpt-4o"
+          display: "GPT-4o (Optimized)"
+          input_cost_per_mtok: 0.005          # $5 per million input tokens
+          output_cost_per_mtok: 0.015         # $15 per million output tokens
+          max_tokens: 128000
+          best_for: "Optimized performance and cost"
+          
+        - id: "gpt-4o-mini"
+          display: "GPT-4o Mini (Fast & Efficient)"
+          input_cost_per_mtok: 0.00015        # $0.15 per million input tokens
+          output_cost_per_mtok: 0.0006        # $0.60 per million output tokens
+          max_tokens: 128000
+          best_for: "Fast processing, cost-effective"
+          
+        - id: "gpt-3.5-turbo"
+          display: "GPT-3.5 Turbo (Fast & Cheap)"
+          input_cost_per_mtok: 0.0005         # $0.50 per million input tokens
+          output_cost_per_mtok: 0.0015        # $1.50 per million output tokens
+          max_tokens: 16000
+          best_for: "Simple tasks, cost-effective"
+  
+  # Model selection per agent based on task complexity
+  # Each can override provider if needed
+  # Available Claude versions: claude-3-{haiku|sonnet|opus}, claude-3.5-{haiku|sonnet}, claude-4-{haiku|sonnet|opus}, claude-5-{haiku|sonnet|opus}
+  # Available GPT versions: gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini
+  models:
+    agent1:
+      name: "Discovery & Scoping Agent"
+      # HIGH COMPLEXITY: Scope analysis requires strong reasoning
+      # Can use: claude-3-opus, claude-4-opus, claude-5-opus for best results
+      provider: "anthropic"
+      model: "claude-3-opus"
+      temperature: 0.7
+      max_tokens: 4096
+      task: "Complex scope analysis and architecture understanding"
+      complexity: "HIGH"
+      description: "Analyzes repository structure, identifies components, defines scope"
+      
+    agent2:
+      name: "User Journey Mapping Agent"
+      # LOW COMPLEXITY: Pattern matching on code structure
+      # Can use: claude-3-haiku, claude-3.5-haiku, claude-4-opus for best results
+      provider: "anthropic"
+      model: "claude-3-haiku"
+      temperature: 0.5
+      max_tokens: 2048
+      task: "Simple journey mapping from controller patterns"
+      complexity: "LOW"
+      description: "Maps user workflows through application endpoints"
+      
+    agent3:
+      name: "Business Rules Extraction Agent"
+      # LOW COMPLEXITY: Rule extraction with simple analysis
+      provider: "anthropic"
+      model: "claude-3-haiku"
+      temperature: 0.3
+      max_tokens: 2048
+      task: "Extract business rules from code patterns"
+      complexity: "LOW"
+      description: "Identifies business logic and validation rules from code"
+      
+    agent4:
+      name: "Gap Analysis Agent"
+      # LOW COMPLEXITY: Gap identification (checklist comparison)
+      provider: "anthropic"
+      model: "claude-3-haiku"
+      temperature: 0.5
+      max_tokens: 2048
+      task: "Identify gaps by comparing code vs requirements"
+      complexity: "LOW"
+      description: "Compares current implementation against requirements"
+      
+    agent5:
+      name: "Synthesis & Requirements Agent"
+      # HIGH COMPLEXITY: Synthesize all data into coherent requirements
+      provider: "anthropic"
+      model: "claude-3-opus"
+      temperature: 0.7
+      max_tokens: 4096
+      task: "Complex synthesis of all BRD components"
+      complexity: "HIGH"
+      description: "Combines all agent outputs into unified requirement set"
+      
+    agent6:
+      name: "Acceptance Criteria Agent"
+      # LOW COMPLEXITY: Template-based acceptance criteria generation
+      provider: "anthropic"
+      model: "claude-3-haiku"
+      temperature: 0.3
+      max_tokens: 1024
+      task: "Fill templates for acceptance criteria (Given-When-Then)"
+      complexity: "LOW"
+      description: "Generates testable acceptance criteria from requirements"
+      
+    agent7:
+      name: "Risk & Dependency Agent"
+      # MEDIUM COMPLEXITY: Risk analysis requires strategic thinking
+      provider: "anthropic"
+      model: "claude-3-sonnet"
+      temperature: 0.6
+      max_tokens: 3000
+      task: "Analyze risks and identify dependencies"
+      complexity: "MEDIUM"
+      description: "Identifies technical risks and system dependencies"
+      
+    agent8:
+      name: "BRD Summarizer & Output Agent"
+      # HIGH COMPLEXITY: Write professional BRD document
+      provider: "anthropic"
+      model: "claude-3-opus"
+      temperature: 0.7
+      max_tokens: 8192
+      task: "Complex document synthesis and writing"
+      complexity: "HIGH"
+      description: "Synthesizes final Business Requirements Document"
+
 # Agent Configuration
 agents:
   agent1:
     name: "Discovery & Scoping Agent"
+    complexity: "HIGH"
     tools:
       - repo_scanner
       - doc_parser
@@ -112,6 +379,7 @@ agents:
 
   agent2:
     name: "User Journey Mapping Agent"
+    complexity: "LOW"
     tools:
       - code_analyzer
       - ontology_extractor
@@ -124,6 +392,7 @@ agents:
 
   agent3:
     name: "Business Rules Extraction Agent"
+    complexity: "LOW"
     tools:
       - code_analyzer
     enabled_tools:
@@ -134,6 +403,7 @@ agents:
 
   agent4:
     name: "Gap Analysis Agent"
+    complexity: "LOW"
     tools:
       - vector_store
     enabled_tools:
@@ -144,6 +414,7 @@ agents:
 
   agent5:
     name: "Synthesis & Requirements Agent"
+    complexity: "HIGH"
     tools: []
     output_files:
       - functional_requirements.json
@@ -151,6 +422,7 @@ agents:
 
   agent6:
     name: "Acceptance Criteria Agent"
+    complexity: "LOW"
     tools: []
     output_files:
       - acceptance_criteria.json
@@ -158,6 +430,7 @@ agents:
 
   agent7:
     name: "Risk & Dependency Agent"
+    complexity: "MEDIUM"
     tools:
       - code_analyzer
     enabled_tools:
@@ -168,6 +441,7 @@ agents:
 
   agent8:
     name: "BRD Summarizer & Output Agent"
+    complexity: "HIGH"
     tools: []
     output_files:
       - final_brd.md
@@ -175,6 +449,7 @@ agents:
 
   agent9:
     name: "KB Store Sync Agent"
+    complexity: "NONE"
     tools:
       - vector_store
     enabled_tools:

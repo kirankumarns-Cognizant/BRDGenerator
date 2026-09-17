@@ -28,6 +28,12 @@ if "pipeline_running" not in st.session_state:
 if "pipeline_log_lines" not in st.session_state:
     st.session_state.pipeline_log_lines = []
 
+# Import model selector for displaying which model each agent uses
+try:
+    from config.llm_selector import LLMSelector
+except ImportError:
+    LLMSelector = None
+
 # Artifact display order by agent (stem prefix)
 _AGENT_ORDER = [
     "scope_definition", "artifact_catalog", "dependency_map", "actors",
@@ -112,8 +118,27 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
 
     def _run_agents():
         for idx, (name, rel_script) in enumerate(_AGENT_SCRIPTS):
-            # Send status update via queue (main thread will parse this)
-            q.put(json.dumps({"__status": "agent_start", "name": name, "index": idx}))
+            # Get model info for this agent
+            agent_num = idx + 1
+            model_info = None
+            if LLMSelector:
+                try:
+                    model_config = LLMSelector.get_model_for_agent(agent_num)
+                    model_info = {
+                        "model": model_config.get("model", "N/A"),
+                        "provider": model_config.get("provider", "anthropic").upper(),
+                        "complexity": model_config.get("complexity", "N/A"),
+                    }
+                except:
+                    pass
+            
+            # Send status update via queue with model info
+            q.put(json.dumps({
+                "__status": "agent_start",
+                "name": name,
+                "index": idx,
+                "model_info": model_info
+            }))
 
             script_path = skills_root / rel_script
 
@@ -150,11 +175,21 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
                 status = "OK" if proc.returncode == 0 else f"EXIT {proc.returncode}"
                 q.put(f"[{status}] {name}\n")
                 agent_status = "completed" if proc.returncode == 0 else "failed"
-                # Send end status BEFORE sentinel
-                q.put(json.dumps({"__status": "agent_end", "name": name, "agent_status": agent_status}))
+                # Send end status BEFORE sentinel with model info
+                q.put(json.dumps({
+                    "__status": "agent_end",
+                    "name": name,
+                    "agent_status": agent_status,
+                    "model_info": model_info
+                }))
             except Exception as exc:
                 q.put(f"[ERROR] {name}: {exc}\n")
-                q.put(json.dumps({"__status": "agent_end", "name": name, "agent_status": "error"}))
+                q.put(json.dumps({
+                    "__status": "agent_end",
+                    "name": name,
+                    "agent_status": "error",
+                    "model_info": model_info
+                }))
 
         q.put(None)  # sentinel
 
@@ -237,13 +272,15 @@ def _drain_queue() -> bool:
                     st.session_state._current_agent = {
                         "index": msg.get("index"),
                         "name": msg.get("name"),
-                        "status": "running"
+                        "status": "running",
+                        "model_info": msg.get("model_info")
                     }
                 elif msg.get("__status") == "agent_end":
                     agent_name = msg.get("name", "")
                     agent_status = msg.get("agent_status", "unknown")
                     if st.session_state._current_agent:
                         st.session_state._current_agent["status"] = agent_status
+                        st.session_state._current_agent["model_info"] = msg.get("model_info")
                     # Ensure agent is added to completed list (avoid duplicates)
                     if agent_name not in st.session_state._agents_completed:
                         st.session_state._agents_completed.append(agent_name)
@@ -277,7 +314,7 @@ def _drain_queue() -> bool:
 
 
 def _render_progress_tracker() -> None:
-    """Display agent progress tracker with completion status."""
+    """Display agent progress tracker with completion status and model info."""
     completed = st.session_state.get("_agents_completed", [])
     current = st.session_state.get("_current_agent")
 
@@ -297,7 +334,7 @@ def _render_progress_tracker() -> None:
     progress_pct = active_count / total if total > 0 else 0
     st.progress(progress_pct, text=f"**Pipeline Progress:** {active_count}/{total} agents")
 
-    # Current agent status
+    # Current agent status with model info
     if current:
         status_icon = {
             "running": "⏳",
@@ -308,7 +345,25 @@ def _render_progress_tracker() -> None:
         }.get(current.get("status", "running"), "⏳")
 
         agent_name = current.get('name', 'Unknown')
-        st.info(f"{status_icon} **Current Agent:** {agent_name}")
+        
+        # Display agent and model info
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.info(f"{status_icon} **Current Agent:** {agent_name}")
+        
+        # Display model info if available
+        model_info = current.get("model_info")
+        if model_info:
+            with col2:
+                with st.container(border=True):
+                    st.markdown("**🤖 Model Info**")
+                    model = model_info.get("model", "N/A")
+                    provider = model_info.get("provider", "N/A")
+                    complexity = model_info.get("complexity", "N/A")
+                    
+                    st.caption(f"**Model:** `{model}`")
+                    st.caption(f"**Provider:** {provider}")
+                    st.caption(f"**Complexity:** {complexity}")
 
         # Add timeout warning if agent has been running too long
         if current.get("status") == "running":
@@ -425,13 +480,19 @@ def render(project_root: Path) -> None:
 
     # ── Run / Stop controls ───────────────────────────────────────────────────
     running = st.session_state.get("pipeline_running", False)
+    ready_for_pipeline = st.session_state.get("repo_ready_for_pipeline", False)
     c1, c2, _ = st.columns([1, 1, 4])
     with c1:
-        run_clicked = st.button("▶ Run Pipeline", disabled=running, type="primary")
+        run_button_disabled = running or not ready_for_pipeline
+        run_clicked = st.button("▶ Run Pipeline", disabled=run_button_disabled, type="primary")
+        if not ready_for_pipeline:
+            st.caption("⏳ Complete document decision in sidebar first")
     with c2:
         stop_clicked = st.button("⏹ Stop", disabled=not running)
 
     if run_clicked and repo_path:
+        st.session_state.pipeline_running = True
+        
         # Save uploaded documents before starting pipeline
         if st.session_state.get("uploaded_documents"):
             st.info("📎 Saving uploaded documents to repository...")
@@ -446,12 +507,7 @@ def render(project_root: Path) -> None:
         else:
             st.info("📊 Starting BRD pipeline analysis...")
 
-        # Clear the document and pipeline ready flags
-        st.session_state.show_document_uploader = False
-        st.session_state.just_uploaded_repo = False
-        st.session_state.repo_ready_for_pipeline = False
-        st.session_state.documents_decision_made = False
-
+        # Start the pipeline (do NOT clear flags before rerun - they need to persist)
         if use_python:
             _start_python_pipeline(repo_path, project_root)
         else:
@@ -496,6 +552,8 @@ def render(project_root: Path) -> None:
             st.session_state._adapter_repo = None
             # Reset document decision flag so user can run pipeline again with new documents if desired
             st.session_state.documents_decision_made = False
+            st.session_state.repo_ready_for_pipeline = False
+            st.session_state.show_document_uploader = False
 
     st.divider()
 

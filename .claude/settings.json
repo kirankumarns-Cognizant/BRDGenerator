@@ -1,0 +1,154 @@
+{
+  "model": "claude-opus-4-7",
+  "fast_mode": false,
+  "extensions": {
+    "enable_code_suggestions": true
+  },
+  "bash": {
+    "allowed": true
+  },
+  "agents": [
+    {
+      "id": "brd-orchestrator",
+      "name": "brd",
+      "title": "BRD Pipeline Orchestrator",
+      "description": "Orchestrates the complete BRD generation pipeline - runs all 9 analysis agents sequentially to generate comprehensive Business Requirements Documents from Java repositories",
+      "type": "custom",
+      "path": ".claude/agents/brd-pipeline-orchestrator.md",
+      "triggers": ["analyze repository", "generate brd", "create business requirements"],
+      "enabled": true
+    }
+  ],
+  "subagents": [
+    {
+      "id": "agent-1-discovery",
+      "name": "Discovery & Scoping",
+      "path": ".claude/subagents/agent-1-discovery.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-2-journey-mapping",
+      "name": "Journey Mapping",
+      "path": ".claude/subagents/agent-2-journey-mapping.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-3-business-rules",
+      "name": "Business Rules Extraction",
+      "path": ".claude/subagents/agent-3-business-rules.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-4-gap-analysis",
+      "name": "Gap Analysis",
+      "path": ".claude/subagents/agent-4-gap-analysis.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-5-synthesis",
+      "name": "Synthesis & BRD Creation",
+      "path": ".claude/subagents/agent-5-synthesis.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-6-acceptance-criteria",
+      "name": "Acceptance Criteria Generation",
+      "path": ".claude/subagents/agent-6-acceptance-criteria.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-7-risk-dependency",
+      "name": "Risk & Dependency Analysis",
+      "path": ".claude/subagents/agent-7-risk-dependency.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-8-summarizer",
+      "name": "BRD Validation & Summarization",
+      "path": ".claude/subagents/agent-8-summarizer.md",
+      "enabled": true
+    },
+    {
+      "id": "agent-9-kb-sync",
+      "name": "Knowledge Base Synchronization",
+      "path": ".claude/subagents/agent-9-kb-sync.md",
+      "enabled": true
+    }
+  ],
+  "skills": [
+    {
+      "id": "agent-1-discovery",
+      "name": "agent-1-discovery",
+      "path": ".claude/skills/agent-1-discovery",
+      "enabled": true
+    },
+    {
+      "id": "agent-2-journey-mapping",
+      "name": "agent-2-journey-mapping",
+      "path": ".claude/skills/agent-2-journey-mapping",
+      "enabled": true
+    },
+    {
+      "id": "agent-3-business-rules",
+      "name": "agent-3-business-rules",
+      "path": ".claude/skills/agent-3-business-rules",
+      "enabled": true
+    },
+    {
+      "id": "agent-4-gap-analysis",
+      "name": "agent-4-gap-analysis",
+      "path": ".claude/skills/agent-4-gap-analysis",
+      "enabled": true
+    },
+    {
+      "id": "agent-5-synthesis",
+      "name": "agent-5-synthesis",
+      "path": ".claude/skills/agent-5-synthesis",
+      "enabled": true
+    },
+    {
+      "id": "agent-6-acceptance-criteria",
+      "name": "agent-6-acceptance-criteria",
+      "path": ".claude/skills/agent-6-acceptance-criteria",
+      "enabled": true
+    },
+    {
+      "id": "agent-7-risk-dependency",
+      "name": "agent-7-risk-dependency",
+      "path": ".claude/skills/agent-7-risk-dependency",
+      "enabled": true
+    },
+    {
+      "id": "agent-8-summarizer",
+      "name": "agent-8-summarizer",
+      "path": ".claude/skills/agent-8-summarizer",
+      "enabled": true
+    },
+    {
+      "id": "code-analysis",
+      "name": "code-analysis",
+      "path": ".claude/skills/code-analysis",
+      "enabled": true
+    },
+    {
+      "id": "document-parsing",
+      "name": "document-parsing",
+      "path": ".claude/skills/document-parsing",
+      "enabled": true
+    }
+  ],
+  "permissions": {
+    "bash": {
+      "allowed": true,
+      "commands": ["git", "find", "grep", "ls", "cat", "cd", "pwd"]
+    },
+    "read": {
+      "allowed": true,
+      "paths": ["."]
+    },
+    "write": {
+      "allowed": true,
+      "paths": ["KB", "output", ".claude"]
+    }
+  }
+}

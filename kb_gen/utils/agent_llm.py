@@ -1,6 +1,7 @@
 """
 Agent LLM helper — calls Claude with repo context.
 All 9 agents use this to generate repo-specific, LLM-powered outputs.
+Supports multi-provider fallback: Claude API → OpenAI → Gemini → GitHub Copilot → Claude Code → Static Analysis
 """
 
 import os
@@ -8,13 +9,13 @@ import json
 from typing import Optional, Dict, Any
 from pathlib import Path
 
-from .api_client import get_anthropic_client, sanitize_error
+from .multi_provider_llm import get_multi_provider_llm, get_active_provider
 from .repo_signals import RepoSignals
 from .document_processor import DocumentProcessor
 
 
 class AgentLLM:
-    """Wrapper for Claude calls with repo context awareness."""
+    """Wrapper for multi-provider LLM calls with repo context awareness."""
 
     def __init__(self, repo_path: Path, api_key: Optional[str] = None, kb_path: Optional[Path] = None):
         self.repo_path = Path(repo_path)
@@ -33,20 +34,13 @@ class AgentLLM:
         else:
             self.doc_processor = None
 
-        self.client = None
-        self._try_init_client()
-
-    def _try_init_client(self):
-        """Initialize Claude client if API key available."""
-        try:
-            self.client = get_anthropic_client(self.api_key)
-        except (ValueError, ImportError) as e:
-            # API key not set or anthropic not installed — fall back to repo signals only
-            self.client = None
+        # Initialize multi-provider LLM
+        self.llm = get_multi_provider_llm()
+        self.provider_info = self.llm.get_provider_info()
 
     def has_api(self) -> bool:
-        """Check if Claude API is available."""
-        return self.client is not None
+        """Check if any LLM provider with API is available (not static analysis)."""
+        return self.llm.has_api()
 
     def get_repo_context(self) -> str:
         """Build a rich text summary of repo signals for Claude context."""
@@ -113,7 +107,7 @@ class AgentLLM:
         system_prompt: Optional[str] = None,
         max_tokens: int = 2000,
     ) -> str:
-        """Call Claude with repo context prepended to prompt."""
+        """Call multi-provider LLM with repo context prepended to prompt."""
         if not self.has_api():
             return ""
 
@@ -151,16 +145,17 @@ class AgentLLM:
                     "\n\nReturn valid JSON when requested. Be thorough, detailed, and ensure all document insights are reflected in the output."
                 )
 
-            response = self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": full_prompt}],
+            # Use multi-provider LLM
+            response = self.llm.complete(
+                prompt=full_prompt,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens
             )
-            return response.content[0].text
+            
+            return response if response else ""
         except Exception as e:
             # Return error message instead of empty string
-            return f"Error: {sanitize_error(str(e))}"
+            return f"Error: {str(e)}"
 
     def generate_json_output(
         self,

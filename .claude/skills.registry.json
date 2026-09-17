@@ -1,0 +1,237 @@
+{
+  "version": "1.0",
+  "description": "Claude BRD Agent Skills Registry",
+  "last_updated": "2026-09-17",
+  "skills": {
+    "agent-1-discovery": {
+      "name": "Discovery & Scoping",
+      "agent": 1,
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Scan repository and catalog artifacts",
+      "tags": ["scanning", "analysis", "discovery"],
+      "outputs": [
+        "artifact_catalog.md",
+        "dependency_map.json",
+        "scope_definition.json"
+      ]
+    },
+    "code-analysis": {
+      "name": "Code Analysis",
+      "agents": [1, 3, 4],
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Analyze code patterns, business logic, and architectural designs",
+      "tags": ["analysis", "code", "patterns"],
+      "outputs": [
+        "analysis_report.md",
+        "patterns.json"
+      ]
+    },
+    "document-parsing": {
+      "name": "Document Parsing",
+      "agents": [1, 5],
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Parse and extract information from PDF, Word, and Markdown documents",
+      "tags": ["parsing", "documents", "extraction"],
+      "outputs": [
+        "extracted_requirements.json",
+        "document_insights.md"
+      ]
+    },
+    "agent-2-journey-mapping": {
+      "name": "Journey Mapping",
+      "agent": 2,
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Map user journeys and business processes",
+      "tags": ["journeys", "processes", "flows"],
+      "outputs": [
+        "journeys.json",
+        "flows.md",
+        "user_personas.json"
+      ]
+    },
+    "agent-3-business-rules": {
+      "name": "Business Rules Extraction",
+      "agent": 3,
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Extract business rules, validation logic, and constraints",
+      "tags": ["rules", "constraints", "business-logic"],
+      "outputs": [
+        "business_rules.json",
+        "constraints.md",
+        "rules_mapping.json"
+      ]
+    },
+    "agent-4-gap-analysis": {
+      "name": "Gap Analysis",
+      "agent": 4,
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Identify gaps between code and requirements",
+      "tags": ["gaps", "analysis", "comparison"],
+      "outputs": [
+        "gaps.json",
+        "missing_requirements.md",
+        "inconsistencies.json"
+      ]
+    },
+    "agent-5-synthesis": {
+      "name": "Synthesis",
+      "agent": 5,
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Synthesize all outputs into comprehensive BRD",
+      "tags": ["synthesis", "brd", "documentation"],
+      "outputs": [
+        "comprehensive_brd.md",
+        "brd_structured.json"
+      ]
+    },
+    "agent-6-acceptance-criteria": {
+      "name": "Acceptance Criteria",
+      "agent": 6,
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Generate acceptance criteria and test scenarios",
+      "tags": ["acceptance", "testing", "criteria"],
+      "outputs": [
+        "acceptance_criteria.json",
+        "test_scenarios.md",
+        "validation_matrix.json"
+      ]
+    },
+    "agent-7-risk-dependency": {
+      "name": "Risk & Dependencies",
+      "agent": 7,
+      "model": "claude-3-sonnet",
+      "complexity": "MEDIUM",
+      "description": "Identify risks and document dependencies",
+      "tags": ["risks", "dependencies", "assessment"],
+      "outputs": [
+        "risks.json",
+        "dependencies.md",
+        "risk_matrix.json",
+        "mitigation_strategies.md"
+      ]
+    },
+    "agent-8-summarizer": {
+      "name": "Summarizer",
+      "agent": 8,
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Create executive summary and quick reference",
+      "tags": ["summary", "highlights", "review"],
+      "outputs": [
+        "executive_summary.md",
+        "quick_reference.json"
+      ]
+    },
+    "confluence-data-extraction": {
+      "name": "Confluence Data Extraction",
+      "agent": 1,
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Extract requirements and specifications from Confluence",
+      "tags": ["confluence", "extraction", "integration"],
+      "outputs": [
+        "confluence_requirements.json",
+        "page_mappings.md"
+      ]
+    }
+  },
+  "agents": {
+    "1": {
+      "name": "Discovery & Scoping",
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Scan repository, catalog artifacts, define scope",
+      "skills": ["agent-1-discovery", "code-analysis", "document-parsing"]
+    },
+    "2": {
+      "name": "Journey Mapping",
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Map user journeys and business processes",
+      "skills": ["agent-2-journey-mapping", "code-analysis"]
+    },
+    "3": {
+      "name": "Business Rules",
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Extract and document business rules",
+      "skills": ["agent-3-business-rules", "code-analysis"]
+    },
+    "4": {
+      "name": "Gap Analysis",
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Identify gaps between code and requirements",
+      "skills": ["agent-4-gap-analysis", "code-analysis"]
+    },
+    "5": {
+      "name": "Synthesis",
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Synthesize all outputs into comprehensive BRD",
+      "skills": ["agent-5-synthesis", "document-parsing"]
+    },
+    "6": {
+      "name": "Acceptance Criteria",
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Generate acceptance criteria and test scenarios",
+      "skills": ["agent-6-acceptance-criteria"]
+    },
+    "7": {
+      "name": "Risk & Dependencies",
+      "model": "claude-3-sonnet",
+      "complexity": "MEDIUM",
+      "description": "Identify risks and document dependencies",
+      "skills": ["agent-7-risk-dependency"]
+    },
+    "8": {
+      "name": "Summarizer",
+      "model": "claude-3-opus",
+      "complexity": "HIGH",
+      "description": "Create executive summary and quick reference",
+      "skills": ["agent-8-summarizer"]
+    },
+    "9": {
+      "name": "KB Sync",
+      "model": "claude-3-haiku",
+      "complexity": "LOW",
+      "description": "Store and index outputs in knowledge base",
+      "skills": []
+    }
+  },
+  "workflows": {
+    "full-pipeline": {
+      "name": "Full BRD Pipeline",
+      "description": "Execute all 9 agents for complete BRD generation",
+      "agents": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "duration_minutes": 15,
+      "complexity": "HIGH",
+      "estimated_cost": "medium"
+    },
+    "focused-analysis": {
+      "name": "Focused Analysis",
+      "description": "Run specific agents for targeted analysis",
+      "agents": "configurable",
+      "duration_minutes": 5,
+      "complexity": "LOW",
+      "estimated_cost": "low"
+    },
+    "document-enriched": {
+      "name": "Document-Enriched Analysis",
+      "description": "Combine documents with code analysis",
+      "agents": [1, 3, 4, 5],
+      "duration_minutes": 10,
+      "complexity": "MEDIUM",
+      "estimated_cost": "medium"
+    }
+  }
+}
