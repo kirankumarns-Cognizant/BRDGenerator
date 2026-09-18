@@ -338,6 +338,23 @@ def _kb_repo_dir(repo_name: str, project_root: Path) -> Path | None:
     return d if d.is_dir() else None
 
 
+@st.cache_data(max_entries=8, show_spinner=False)
+def _artifacts_zip(kb_dir: str, names: tuple[str, ...]) -> bytes:
+    """Zip the artifact set. Cached so a rerun doesn't recompress every file."""
+    base = Path(kb_dir)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in names:
+            zf.write(base / name, arcname=name)
+    return buf.getvalue()
+
+
+@st.cache_data(max_entries=8, show_spinner=False)
+def _read_brd(path: str, mtime: float) -> str:
+    """Read the BRD. mtime is part of the cache key so edits still reload."""
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
 def _render_brd_viewer(kb_dir: Path) -> None:
     """Render the comprehensive BRD markdown and its Mermaid diagrams."""
     brd_files = sorted(kb_dir.glob("COMPREHENSIVE_BRD_*.md"))
@@ -346,8 +363,8 @@ def _render_brd_viewer(kb_dir: Path) -> None:
         return
 
     brd_file = brd_files[0]
-    text = brd_file.read_text(encoding="utf-8", errors="replace")
     stat = brd_file.stat()
+    text = _read_brd(str(brd_file), stat.st_mtime)
     mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
     diagrams = _MERMAID_BLOCK.findall(text)
 
@@ -590,6 +607,13 @@ def render(project_root: Path) -> None:
 
     st.divider()
 
+    # While the pipeline streams, the page reruns ~3x/second. Rendering the
+    # artifact browser and the BRD on each of those reruns re-zipped every
+    # artifact and re-pushed the whole document over the websocket; the outputs
+    # are also mid-write and not worth reading yet.
+    if still_running:
+        return
+
     # ── Artifact browser ──────────────────────────────────────────────────────
     kb_dir = _kb_repo_dir(repo_name, project_root)
     if kb_dir is None:
@@ -604,15 +628,9 @@ def render(project_root: Path) -> None:
 
     st.subheader(f"Artifacts — {repo_name} ({len(artifact_files)} files)")
 
-    # ZIP download
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in artifact_files:
-            zf.write(f, arcname=f.name)
-    buf.seek(0)
     st.download_button(
         "⬇ Download All Artifacts (ZIP)",
-        data=buf,
+        data=_artifacts_zip(str(kb_dir), tuple(f.name for f in artifact_files)),
         file_name=f"{repo_name}_artifacts.zip",
         mime="application/zip",
     )

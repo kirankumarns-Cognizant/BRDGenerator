@@ -218,13 +218,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["📄 Generate BRD", "💬 RAG Chat", "🕸️ Hypergraph"])
+# on_change="rerun" makes the tabs dynamic so .open is meaningful. Without it
+# Streamlit executes every tab body on every rerun, which during a pipeline run
+# meant rebuilding the hypergraph viewer and the RAG adapter several times a
+# second and pushing all of it over the websocket.
+tab1, tab2, tab3 = st.tabs(
+    ["📄 Generate BRD", "💬 RAG Chat", "🕸️ Hypergraph"], on_change="rerun"
+)
 
-with tab1:
-    pipeline_tab.render(PROJECT_ROOT)
+if tab1.open:
+    with tab1:
+        pipeline_tab.render(PROJECT_ROOT)
 
-with tab2:
-    rag_tab.render(PROJECT_ROOT)
+if tab2.open:
+    with tab2:
+        rag_tab.render(PROJECT_ROOT)
 
-with tab3:
-    hypergraph_tab.render(PROJECT_ROOT)
+if tab3.open:
+    with tab3:
+        hypergraph_tab.render(PROJECT_ROOT)
