@@ -1,6 +1,9 @@
 [client]
 toolbarMode = "viewer"
-showErrorDetails = false
+# "none" keeps Streamlit's own uncaught-exception tracebacks and deprecation
+# warnings out of the browser; they still go to the console.
+showErrorDetails = "none"
+showErrorLinks = false
 
 [runner]
 magicEnabled = true

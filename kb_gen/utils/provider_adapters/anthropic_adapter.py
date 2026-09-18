@@ -1,10 +1,11 @@
 """
 Anthropic Claude API Adapter
-Supports: claude-3-opus, claude-3-sonnet, claude-3-haiku
 """
 
 import os
 from typing import Optional
+
+MODEL = "claude-opus-5"
 
 
 class AnthropicClient:
@@ -34,22 +35,26 @@ class AnthropicClient:
         max_tokens: int = 2000,
         temperature: float = 0.7
     ) -> str:
-        """Generate completion with Claude."""
+        """Generate completion with Claude.
+
+        `temperature` is accepted so every provider adapter shares one signature,
+        but it is not forwarded: current Claude models removed the sampling
+        parameters, and the SDK rejects the keyword outright.
+        """
         if not self.client:
             return ""
-        
+
         try:
             messages = [{"role": "user", "content": prompt}]
-            
+
             response = self.client.messages.create(
-                model="claude-3-opus-20250219",
+                model=MODEL,
                 max_tokens=max_tokens,
                 system=system_prompt or "You are a helpful BRD analysis expert.",
                 messages=messages,
-                temperature=temperature
             )
-            
-            return response.content[0].text
+
+            return next((b.text for b in response.content if b.type == "text"), "")
         except Exception as e:
             print(f"Anthropic error: {e}")
             return ""

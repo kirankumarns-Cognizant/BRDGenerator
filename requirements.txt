@@ -7,6 +7,8 @@ pydriller>=2.6
 # Document parsing
 unstructured>=0.12.0
 pdfplumber>=0.10.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
 
 # Config parsing
 pyyaml>=6.0.1
@@ -34,6 +36,11 @@ networkx>=3.0
 fastapi>=0.115.0
 uvicorn>=0.32.0
 httpx>=0.27.0
+requests>=2.32.0
+
+# Uses the OS trust store for TLS — required behind corporate proxies that
+# re-sign certificates with an internal CA that certifi does not carry.
+truststore>=0.9.0
 
 # Utilities
 rich>=13.9.0

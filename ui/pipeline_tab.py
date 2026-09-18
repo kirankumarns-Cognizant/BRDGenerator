@@ -8,6 +8,7 @@ import io
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -21,6 +22,8 @@ import streamlit as st
 # Initialize session state at module load time
 if "_agents_completed" not in st.session_state:
     st.session_state._agents_completed = []
+if "_agents_failed" not in st.session_state:
+    st.session_state._agents_failed = []
 if "_current_agent" not in st.session_state:
     st.session_state._current_agent = None
 if "pipeline_running" not in st.session_state:
@@ -34,18 +37,7 @@ try:
 except ImportError:
     LLMSelector = None
 
-# Artifact display order by agent (stem prefix)
-_AGENT_ORDER = [
-    "scope_definition", "artifact_catalog", "dependency_map", "actors",
-    "journey_map", "user_journey_map", "journey_conflicts",
-    "business_rules", "validation_logic",
-    "gap_analysis", "gap_register",
-    "functional_requirements", "non_functional_requirements", "synthesis_decisions",
-    "acceptance_criteria", "acceptance_criteria_gherkin", "test_scenarios",
-    "risk_assessment", "risk_register", "dependency_analysis", "dependency_register",
-    "brd_final", "brd_executive_summary", "executive_summary",
-    "ingestion_log", "embedding_stats",
-]
+_MERMAID_BLOCK = re.compile(r"```mermaid[^\S\n]*\n(.*?)```", re.DOTALL)
 
 # Python agent scripts in execution order (LLM-powered versions)
 _AGENT_SCRIPTS = [
@@ -61,14 +53,6 @@ _AGENT_SCRIPTS = [
 ]
 
 
-def _sort_key(filename: str) -> int:
-    stem = Path(filename).stem
-    try:
-        return _AGENT_ORDER.index(stem)
-    except ValueError:
-        return len(_AGENT_ORDER)
-
-
 def _utf8_env() -> dict:
     """Return a copy of the current environment with PYTHONIOENCODING=utf-8.
     Prevents UnicodeEncodeError when agent scripts print emoji on Windows (cp1252)."""
@@ -77,31 +61,8 @@ def _utf8_env() -> dict:
     return env
 
 
-def _stream_process(proc: subprocess.Popen, q: queue.Queue) -> None:
-    """Background thread: read process stdout/stderr and push lines to queue."""
-    for line in proc.stdout:
-        q.put(line)
-    q.put(None)  # sentinel — process finished
-
-
-def _start_powershell_pipeline(repo_path: str, project_root: Path) -> None:
-    config_path = str(project_root / "config" / "config.yaml")
-    script_path = str(project_root / "run_brd_pipeline.ps1")
-    st.session_state["_pending_hypergraph_regen"] = True
-    st.session_state["_hypergraph_regenerated"] = False
-    cmd = [
-        "powershell.exe",
-        "-NonInteractive",
-        "-ExecutionPolicy", "Bypass",
-        "-File", script_path,
-        "-RepoPath", repo_path,
-        "-ConfigPath", config_path,
-    ]
-    _launch(cmd)
-
-
-def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
-    """Python orchestrator: run each agent .py script sequentially in a thread."""
+def _start_pipeline(repo_path: str, project_root: Path) -> None:
+    """Run each agent .py script sequentially in a background thread."""
     repo_name = Path(repo_path).name
     kb_output = str(project_root / "KB" / repo_name)
     skills_root = project_root / ".github" / "skills"
@@ -109,15 +70,26 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
     st.session_state["_hypergraph_regenerated"] = False
 
     q: queue.Queue = queue.Queue()
+    # Shared with the worker thread so Stop can reach the live subprocess.
+    # Session state isn't safe to mutate from a thread without a script context.
+    control = {"proc": None, "stop": threading.Event()}
+    api_key = st.session_state.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
+
     st.session_state._pipeline_queue = q
+    st.session_state._pipeline_control = control
     st.session_state.pipeline_running = True
     st.session_state.pipeline_log_lines = []
-    st.session_state._pipeline_proc = None  # no single process for Python mode
     st.session_state._agents_completed = []
+    st.session_state._agents_failed = []
     st.session_state._current_agent = None
+    st.session_state["_run_finalized"] = False
 
     def _run_agents():
         for idx, (name, rel_script) in enumerate(_AGENT_SCRIPTS):
+            if control["stop"].is_set():
+                q.put("[STOPPED] Pipeline cancelled.\n")
+                break
+
             # Get model info for this agent
             agent_num = idx + 1
             model_info = None
@@ -154,8 +126,6 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
                 repo_path,
                 "--output", kb_output,
             ]
-            # Add API key if available in session state
-            api_key = st.session_state.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
             if api_key:
                 cmd.extend(["--api-key", api_key])
             try:
@@ -169,9 +139,11 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
                     env=_utf8_env(),
                     cwd=str(project_root),
                 )
+                control["proc"] = proc
                 for line in proc.stdout:
                     q.put(line)
                 proc.wait()
+                control["proc"] = None
                 status = "OK" if proc.returncode == 0 else f"EXIT {proc.returncode}"
                 q.put(f"[{status}] {name}\n")
                 agent_status = "completed" if proc.returncode == 0 else "failed"
@@ -195,25 +167,6 @@ def _start_python_pipeline(repo_path: str, project_root: Path) -> None:
 
     t = threading.Thread(target=_run_agents, daemon=True)
     t.start()
-
-
-def _launch(cmd: list) -> None:
-    q: queue.Queue = queue.Queue()
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=_utf8_env(),
-    )
-    t = threading.Thread(target=_stream_process, args=(proc, q), daemon=True)
-    t.start()
-    st.session_state._pipeline_proc = proc
-    st.session_state._pipeline_queue = q
-    st.session_state.pipeline_running = True
-    st.session_state.pipeline_log_lines = []
 
 
 def _regenerate_hypergraph(project_root: Path) -> tuple[bool, str]:
@@ -281,9 +234,13 @@ def _drain_queue() -> bool:
                     if st.session_state._current_agent:
                         st.session_state._current_agent["status"] = agent_status
                         st.session_state._current_agent["model_info"] = msg.get("model_info")
-                    # Ensure agent is added to completed list (avoid duplicates)
+                    # "completed" here means finished, not succeeded — it drives
+                    # the progress bar. Failures are tracked separately so the
+                    # final message can be red rather than green.
                     if agent_name not in st.session_state._agents_completed:
                         st.session_state._agents_completed.append(agent_name)
+                    if agent_status in ("failed", "error") and agent_name not in st.session_state._agents_failed:
+                        st.session_state._agents_failed.append(agent_name)
                 continue
             except json.JSONDecodeError:
                 pass
@@ -309,6 +266,10 @@ def _drain_queue() -> bool:
 
     if not still_running:
         st.session_state.pipeline_running = False
+        # Drop the exhausted queue. The sentinel only arrives once, so leaving it
+        # in place would make every later call report "still running" again and
+        # spin the page in a 0.3s rerun loop.
+        st.session_state._pipeline_queue = None
 
     return still_running
 
@@ -345,11 +306,13 @@ def _render_progress_tracker() -> None:
         }.get(current.get("status", "running"), "⏳")
 
         agent_name = current.get('name', 'Unknown')
-        
+        is_running = current.get("status") == "running"
+        label = "Current Agent" if is_running else "Last Agent"
+
         # Display agent and model info
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.info(f"{status_icon} **Current Agent:** {agent_name}")
+            st.caption(f"{status_icon} **{label}:** {agent_name}")
         
         # Display model info if available
         model_info = current.get("model_info")
@@ -366,13 +329,60 @@ def _render_progress_tracker() -> None:
                     st.caption(f"**Complexity:** {complexity}")
 
         # Add timeout warning if agent has been running too long
-        if current.get("status") == "running":
+        if is_running:
             st.caption("⏱️ *Agent is processing... This may take several minutes with large documents*")
 
 
 def _kb_repo_dir(repo_name: str, project_root: Path) -> Path | None:
     d = project_root / "KB" / repo_name
     return d if d.is_dir() else None
+
+
+def _render_brd_viewer(kb_dir: Path) -> None:
+    """Render the comprehensive BRD markdown and its Mermaid diagrams."""
+    brd_files = sorted(kb_dir.glob("COMPREHENSIVE_BRD_*.md"))
+    if not brd_files:
+        st.caption("No comprehensive BRD yet. Run the pipeline to generate one.")
+        return
+
+    brd_file = brd_files[0]
+    text = brd_file.read_text(encoding="utf-8", errors="replace")
+    stat = brd_file.stat()
+    mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+    diagrams = _MERMAID_BLOCK.findall(text)
+
+    st.subheader("Comprehensive BRD")
+    st.caption(f"{brd_file.name} — {_format_size(stat.st_size)} — generated {mtime}")
+
+    st.download_button(
+        "⬇ Download BRD (Markdown)",
+        data=text.encode("utf-8"),
+        file_name=brd_file.name,
+        mime="text/markdown",
+        key=f"download_brd_{stat.st_mtime}",
+    )
+
+    views = ["Document", f"Diagrams ({len(diagrams)})", "Raw markdown"]
+    view = st.segmented_control(
+        "BRD view",
+        views,
+        default=views[0],
+        required=True,
+        label_visibility="collapsed",
+        key="brd_view",
+    )
+
+    if view == views[2]:
+        st.code(text, language="markdown")
+    elif view == views[1]:
+        if not diagrams:
+            st.caption("This BRD contains no Mermaid diagrams.")
+        for i, diagram in enumerate(diagrams, 1):
+            st.caption(f"Diagram {i} of {len(diagrams)}")
+            st.mermaid_chart(diagram.strip())
+    else:
+        # Fenced ```mermaid blocks render as diagrams inside st.markdown.
+        st.markdown(text)
 
 
 def _resolve_repo_path(repo_name: str, project_root: Path) -> str:
@@ -429,10 +439,9 @@ def _save_uploaded_documents(repo_name: str, project_root: Path) -> bool:
             file_path = docs_dir / file_obj.name
             with open(file_path, "wb") as f:
                 f.write(file_obj.getbuffer())
-            st.success(f"✅ Saved: {file_obj.name} to repository documents folder")
         return True
     except Exception as e:
-        st.error(f"❌ Error saving documents: {e}")
+        st.error(f"Pipeline not started — could not save supporting documents: {e}")
         return False
 
 
@@ -464,13 +473,21 @@ def render(project_root: Path) -> None:
 
     repo_path = st.session_state.get("repo_path_input", resolved_repo_path)
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        repo_path = st.text_input("Repository path", value=repo_path, key="repo_path_input",
-                                   help="Absolute path to the repository to analyze.")
-    with col2:
-        use_python = st.checkbox("Use Python orchestrator", value=False,
-                                  help="Bypass PowerShell and call each agent .py directly.")
+    repo_path = st.text_input("Repository path", value=repo_path, key="repo_path_input",
+                               help="Absolute path to the repository to analyze.")
+
+    # ── Drain pipeline output ────────────────────────────────────────────────
+    # Must happen before the progress tracker renders, otherwise the tracker
+    # draws last rerun's state and a finished agent still reads as running.
+    streaming = st.session_state.get("pipeline_running", False) or bool(st.session_state.pipeline_log_lines)
+    still_running = _drain_queue() if streaming else False
+
+    # Nothing can be mid-flight once the pipeline stops. A stopped or crashed
+    # run emits no agent_end, so clear any left-over running state.
+    if not still_running:
+        current_agent = st.session_state.get("_current_agent")
+        if current_agent and current_agent.get("status") == "running":
+            st.session_state._current_agent = None
 
     # ── Progress tracker (always visible when running) ──────────────────────────
     if st.session_state.get("_current_agent") or st.session_state.get("_agents_completed"):
@@ -491,41 +508,34 @@ def render(project_root: Path) -> None:
         stop_clicked = st.button("⏹ Stop", disabled=not running)
 
     if run_clicked and repo_path:
-        st.session_state.pipeline_running = True
-        
-        # Save uploaded documents before starting pipeline
-        if st.session_state.get("uploaded_documents"):
-            st.info("📎 Saving uploaded documents to repository...")
-            if _save_uploaded_documents(repo_name, project_root):
-                doc_count = len(st.session_state.get("uploaded_documents", []))
-                st.success("✅ Documents saved successfully!")
-                st.info(f"💡 **Document Integration:** {doc_count} document(s) will be analyzed and incorporated into the BRD generation.")
-                st.warning(f"⏱️ **Note:** Processing {doc_count} document(s) may take **5-10 minutes or more** depending on document size. Please be patient while Agent 1 analyzes the content.")
-                st.divider()
-            else:
-                st.warning("⚠️ Some documents may not have been saved.")
-        else:
-            st.info("📊 Starting BRD pipeline analysis...")
-
-        # Start the pipeline (do NOT clear flags before rerun - they need to persist)
-        if use_python:
-            _start_python_pipeline(repo_path, project_root)
-        else:
-            _start_powershell_pipeline(repo_path, project_root)
-        st.rerun()
+        # A save failure must block the run, and skipping st.rerun() is what
+        # keeps its error message on screen.
+        docs_ok = (
+            _save_uploaded_documents(repo_name, project_root)
+            if st.session_state.get("uploaded_documents")
+            else True
+        )
+        if docs_ok:
+            _start_pipeline(repo_path, project_root)
+            st.rerun()
 
     if stop_clicked:
-        proc = st.session_state.get("_pipeline_proc")
-        if proc:
-            proc.terminate()
+        control = st.session_state.get("_pipeline_control")
+        if control:
+            # Flag first so the worker won't start the next agent, then kill
+            # the agent currently running.
+            control["stop"].set()
+            proc = control["proc"]
+            if proc:
+                proc.terminate()
         st.session_state.pipeline_running = False
         st.session_state._pipeline_queue = None
         st.session_state["_pending_hypergraph_regen"] = False
+        st.session_state._current_agent = None
+        st.rerun()
 
     # ── Log streaming ─────────────────────────────────────────────────────────
-    if running or st.session_state.pipeline_log_lines:
-        still_running = _drain_queue()
-
+    if streaming:
         log_placeholder = st.empty()
         lines = st.session_state.pipeline_log_lines
         log_placeholder.code("\n".join(lines[-200:]) if lines else "Starting…", language="text")
@@ -534,42 +544,62 @@ def render(project_root: Path) -> None:
             time.sleep(0.3)
             st.rerun()
         elif lines:
-            if st.session_state.get("_pending_hypergraph_regen") and not st.session_state.get("_hypergraph_regenerated"):
-                ok, message = _regenerate_hypergraph(project_root)
-                st.session_state["_pending_hypergraph_regen"] = False
-                st.session_state["_hypergraph_regenerated"] = True
-                st.cache_data.clear()
-                if ok:
-                    st.success("Pipeline finished. Hypergraph regenerated.")
-                else:
-                    st.warning("Pipeline finished, but hypergraph regeneration failed.")
-                    if message:
-                        st.code(message, language="text")
+            # Finalise once. This branch is re-entered on every later rerun
+            # because the log lines persist, and repeating these writes would
+            # keep clearing the sidebar's document decision so it never sticks.
+            if not st.session_state.get("_run_finalized"):
+                st.session_state["_run_finalized"] = True
+
+                if st.session_state.get("_pending_hypergraph_regen"):
+                    ok, message = _regenerate_hypergraph(project_root)
+                    st.session_state["_pending_hypergraph_regen"] = False
+                    st.session_state["_hypergraph_regenerated"] = True
+                    st.session_state["_hypergraph_regen_ok"] = ok
+                    st.session_state["_hypergraph_regen_message"] = "" if ok else message
+                    st.cache_data.clear()
+
+                # Let the RAG tab re-initialise and see collections this run created.
+                st.session_state._adapter_cache = None
+                st.session_state._adapter_repo = None
+                # Allow another run with different documents.
+                st.session_state.documents_decision_made = False
+                st.session_state.repo_ready_for_pipeline = False
+                st.session_state.show_document_uploader = False
+
+            regen_note = ""
+            if st.session_state.get("_hypergraph_regenerated"):
+                regen_note = (
+                    " Hypergraph regenerated."
+                    if st.session_state.get("_hypergraph_regen_ok")
+                    else " Hypergraph regeneration failed."
+                )
+
+            failed = st.session_state.get("_agents_failed", [])
+            if failed:
+                st.error(
+                    f"Pipeline finished with {len(failed)} failed agent(s):"
+                    f" {', '.join(failed)}.{regen_note}"
+                    " See the log above for details."
+                )
             else:
-                st.success("Pipeline finished.")
-            # Clear the RAG adapter cache so it will reinitialize and see new collections
-            st.session_state._adapter_cache = None
-            st.session_state._adapter_repo = None
-            # Reset document decision flag so user can run pipeline again with new documents if desired
-            st.session_state.documents_decision_made = False
-            st.session_state.repo_ready_for_pipeline = False
-            st.session_state.show_document_uploader = False
+                st.success(f"Pipeline finished.{regen_note}")
+
+            regen_message = st.session_state.get("_hypergraph_regen_message")
+            if regen_message:
+                st.code(regen_message, language="text")
 
     st.divider()
 
     # ── Artifact browser ──────────────────────────────────────────────────────
     kb_dir = _kb_repo_dir(repo_name, project_root)
     if kb_dir is None:
-        st.info("No KB artifacts yet. Run the pipeline above to generate outputs.")
+        st.caption("No KB artifacts yet. Run the pipeline above to generate outputs.")
         return
 
-    artifact_files = sorted(
-        [f for f in kb_dir.iterdir() if f.is_file()],
-        key=lambda f: _sort_key(f.name),
-    )
+    artifact_files = sorted(f for f in kb_dir.iterdir() if f.is_file())
 
     if not artifact_files:
-        st.info("KB directory exists but contains no artifacts yet.")
+        st.caption("KB directory exists but contains no artifacts yet.")
         return
 
     st.subheader(f"Artifacts — {repo_name} ({len(artifact_files)} files)")
@@ -623,37 +653,4 @@ def render(project_root: Path) -> None:
 
             st.divider()
 
-    st.divider()
-
-    for f in artifact_files:
-        stat = f.stat()
-        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-
-        # Create expander header with download button
-        col1, col2 = st.columns([4, 1])
-
-        with col1:
-            with st.expander(f"{f.name}  —  {_format_size(stat.st_size)}  —  {mtime}"):
-                suffix = f.suffix.lower()
-                try:
-                    if suffix == ".json":
-                        data = json.loads(f.read_text(encoding="utf-8", errors="replace"))
-                        st.json(data)
-                    elif suffix == ".md":
-                        st.markdown(f.read_text(encoding="utf-8", errors="replace"))
-                    elif suffix in {".feature", ".gherkin"}:
-                        st.code(f.read_text(encoding="utf-8", errors="replace"), language="gherkin")
-                    else:
-                        st.code(f.read_text(encoding="utf-8", errors="replace"), language="text")
-                except Exception as exc:
-                    st.error(f"Could not read file: {exc}")
-
-        with col2:
-            file_content = f.read_bytes()
-            st.download_button(
-                label="📥 Download",
-                data=file_content,
-                file_name=f.name,
-                mime="application/octet-stream",
-                key=f"download_{f.name}_{stat.st_mtime}",
-            )
+    _render_brd_viewer(kb_dir)

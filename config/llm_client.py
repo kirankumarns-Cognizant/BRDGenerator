@@ -42,18 +42,21 @@ class AnthropicLLMClient(LLMClientBase):
             raise ImportError("anthropic package not installed. Run: pip install anthropic")
     
     def call(self, prompt: str, system_prompt: str = None) -> str:
-        """Call Claude API and return text response."""
+        """Call Claude API and return text response.
+
+        self.temperature is deliberately not forwarded: current Claude models
+        removed the sampling parameters and the SDK rejects the keyword.
+        """
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
                 system=system_prompt or "You are a helpful assistant.",
                 messages=[
                     {"role": "user", "content": prompt}
                 ]
             )
-            return response.content[0].text
+            return next((b.text for b in response.content if b.type == "text"), "")
         except Exception as e:
             raise RuntimeError(f"Claude API error: {e}")
     

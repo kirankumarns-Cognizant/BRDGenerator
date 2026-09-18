@@ -40,6 +40,10 @@ ENV/
 Thumbs.db
 desktop.ini
 
+# ── Agent tooling ─────────────────────────────────────────────────────────────
+# Duplicate of .claude/skills/, which is the tracked copy.
+.agents/
+
 # ── Streamlit ─────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
 

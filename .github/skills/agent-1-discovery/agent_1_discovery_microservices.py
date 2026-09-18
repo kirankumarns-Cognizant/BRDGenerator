@@ -28,7 +28,7 @@ class LLMDiscoveryAgentMicroservices:
         self.output_path = Path(output_path) if output_path else Path("KB") / self.repo_name
         self.output_path.mkdir(parents=True, exist_ok=True)
 
-        self.agent_llm = AgentLLM(self.repo_path, api_key)
+        self.agent_llm = AgentLLM(self.repo_path, api_key, kb_path=self.output_path)
         self.signals = self.agent_llm.repo_signals.get_all_signals()
         self.timestamp = datetime.now().isoformat()
 

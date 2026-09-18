@@ -20,7 +20,7 @@ class ComprehensiveBRDBuilderLLM:
         self.repo_path = Path(repo_path)
         self.kb_path = Path(kb_path) if kb_path else None
         self.signals = signals
-        self.agent_llm = AgentLLM(repo_path, api_key)
+        self.agent_llm = AgentLLM(repo_path, api_key, kb_path=self.kb_path)
         self.domain = self._infer_domain()
         self._api_endpoints_cache = None
         self._entity_models_cache = None

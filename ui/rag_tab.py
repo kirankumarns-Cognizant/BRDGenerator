@@ -268,11 +268,10 @@ def _render_cache_badge(entry: dict) -> None:
     hits = entry.get("hits", 1)
     age_min = int((time.time() - entry["ts"]) / 60)
     age_str = f"{age_min}m ago" if age_min < 60 else f"{age_min // 60}h ago"
-    st.success(
-        f"⚡ **Cached answer** · 0 LLM calls · "
-        f"~{in_tok:,} input tokens saved · ~{out_tok:,} output tokens saved · "
-        f"hit #{hits} · cached {age_str}",
-        icon="⚡",
+    st.caption(
+        f":green-badge[⚡ Cached] 0 LLM calls · "
+        f"~{in_tok:,} input / ~{out_tok:,} output tokens saved · "
+        f"hit #{hits} · cached {age_str}"
     )
 
 
@@ -473,8 +472,8 @@ def _generate_answer(prompt, sources, api_key, repo_name):
                 st.markdown(answer_text)
                 return answer_text
         except Exception as exc:
-            st.warning(f"⚠️ LLM synthesis failed: {exc}")
-            st.info("Showing extracted excerpts instead.")
+            st.warning(f"LLM synthesis failed: {exc}")
+            st.caption("Showing extracted excerpts instead.")
 
     # Fallback: show raw excerpts when no API key or LLM failed
     answer = _fallback_response(sources)
@@ -547,11 +546,12 @@ def render(project_root: Path) -> None:
             "Run the full pipeline first — Agent 9 (KB Store Sync) populates the vector store."
         )
         if available:
-            st.info(f"**Available collections:** {', '.join(available)}\n\n"
-                   f"**Tip:** If you just ran the pipeline, try switching tabs and coming back to RAG Chat—"
-                   f"the new collection will be detected automatically.")
+            st.caption(
+                f"**Available collections:** {', '.join(available)} — if you just ran the "
+                "pipeline, switch tabs and come back; the new collection is picked up automatically."
+            )
         else:
-            st.info("No collections found in ChromaDB. The vector store may need initialization.")
+            st.caption("No collections found in ChromaDB. The vector store may need initialization.")
         if st.button("▶ Run Agent 9 (KB Store Sync) now"):
             _run_agent9(repo_name, project_root)
         return

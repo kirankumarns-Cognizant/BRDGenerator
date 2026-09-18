@@ -1,5 +1,7 @@
 """
-Document processor — reads and summarizes uploaded support documents (.csv, .md, .pdf)
+Document processor — reads and summarizes uploaded support documents.
+Handles PDF, Office (.docx/.xlsx), CSV and any text-like format; binary files that
+have no parser are reported rather than decoded into noise.
 Integrates uploaded documents into BRD analysis.
 """
 
@@ -7,9 +9,16 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+# Extensions read straight through as UTF-8 text.
+_TEXT_SUFFIXES = {
+    ".md", ".markdown", ".txt", ".text", ".json", ".yaml", ".yml", ".xml",
+    ".html", ".htm", ".rst", ".log", ".ini", ".cfg", ".toml", ".sql",
+    ".java", ".py", ".js", ".ts", ".properties", ".gherkin", ".feature",
+}
+
 
 class DocumentProcessor:
-    """Process uploaded documents (.csv, .md, .pdf) for BRD analysis."""
+    """Process uploaded supporting documents for BRD analysis."""
 
     def __init__(self, kb_path: Path):
         """Initialize with KB directory path."""
@@ -30,15 +39,19 @@ class DocumentProcessor:
 
     def read_document(self, doc_path: Path) -> Optional[str]:
         """Read and return document content."""
+        suffix = doc_path.suffix.lower()
         try:
-            if doc_path.suffix.lower() == ".pdf":
+            if suffix == ".pdf":
                 return self._read_pdf(doc_path)
-            elif doc_path.suffix.lower() == ".csv":
+            if suffix == ".csv":
                 return self._read_csv(doc_path)
-            elif doc_path.suffix.lower() == ".md":
-                return self._read_markdown(doc_path)
-            else:
+            if suffix == ".docx":
+                return self._read_docx(doc_path)
+            if suffix in {".xlsx", ".xlsm"}:
+                return self._read_xlsx(doc_path)
+            if suffix in _TEXT_SUFFIXES:
                 return self._read_text(doc_path)
+            return self._read_unknown(doc_path)
         except Exception as e:
             print(f"Warning: Could not read document {doc_path.name}: {e}")
             return None
@@ -50,12 +63,21 @@ class DocumentProcessor:
         except Exception:
             return ""
 
-    def _read_markdown(self, path: Path) -> str:
-        """Read Markdown file."""
+    def _read_unknown(self, path: Path) -> str:
+        """Read an unrecognised extension, refusing anything that looks binary.
+
+        Decoding a binary file with errors="replace" used to push pages of
+        mojibake into the prompt, which costs tokens and tells the model nothing.
+        """
         try:
-            return path.read_text(encoding="utf-8", errors="replace")
+            head = path.read_bytes()[:8192]
         except Exception:
             return ""
+
+        if b"\x00" in head:
+            return f"[Binary file: {path.name} — no parser available, content not included]"
+
+        return self._read_text(path)
 
     def _read_csv(self, path: Path) -> str:
         """Read CSV file and format as table."""
@@ -101,12 +123,65 @@ class DocumentProcessor:
         except Exception as e:
             return f"[PDF Document: {path.name}]\n(Error reading PDF: {e})"
 
-    def get_documents_context(self, max_docs: int = 3, max_total_len: int = 5000) -> str:
+    def _read_docx(self, path: Path) -> str:
+        """Read a Word document: paragraphs plus table cells."""
+        try:
+            import docx
+        except ImportError:
+            return f"[Word Document: {path.name}]\n(python-docx not installed - cannot extract text)"
+
+        try:
+            document = docx.Document(str(path))
+            parts = [p.text for p in document.paragraphs if p.text.strip()]
+            for table in document.tables:
+                for row in table.rows:
+                    cells = [c.text.strip() for c in row.cells]
+                    if any(cells):
+                        parts.append("| " + " | ".join(cells) + " |")
+            return "\n".join(parts)
+        except Exception as e:
+            return f"[Word Document: {path.name}]\n(Error reading document: {e})"
+
+    def _read_xlsx(self, path: Path) -> str:
+        """Read a spreadsheet, one markdown table per sheet."""
+        try:
+            import openpyxl
+        except ImportError:
+            return f"[Spreadsheet: {path.name}]\n(openpyxl not installed - cannot extract cells)"
+
+        try:
+            book = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+            parts = []
+            for sheet in book.worksheets:
+                rows = [
+                    ["" if c is None else str(c) for c in row]
+                    for row in sheet.iter_rows(values_only=True)
+                ]
+                rows = [r for r in rows if any(v.strip() for v in r)]
+                if not rows:
+                    continue
+                parts.append(f"\n### Sheet: {sheet.title}\n")
+                parts.append("| " + " | ".join(rows[0]) + " |")
+                parts.append("|" + "|".join(["---"] * len(rows[0])) + "|")
+                for row in rows[1:]:
+                    parts.append("| " + " | ".join(row) + " |")
+            book.close()
+            return "\n".join(parts)
+        except Exception as e:
+            return f"[Spreadsheet: {path.name}]\n(Error reading spreadsheet: {e})"
+
+    def get_documents_context(
+        self,
+        max_docs: int = 25,
+        max_total_len: int = 60000,
+        max_doc_len: int = 20000,
+    ) -> str:
         """Get formatted context string for all uploaded documents.
 
         Args:
             max_docs: Maximum number of documents to include
             max_total_len: Maximum total character length to prevent token overflow
+            max_doc_len: Maximum characters taken from any single document
         """
         if not self.has_documents():
             return ""
@@ -126,8 +201,6 @@ class DocumentProcessor:
                 doc_footer = f"\n{'='*60}\n"
                 space_needed = len(doc_header) + len(doc_footer)
 
-                # Limit individual document to 1500 chars
-                max_doc_len = 1500
                 if len(content) > max_doc_len:
                     content = content[:max_doc_len] + "\n[... truncated ...]"
 

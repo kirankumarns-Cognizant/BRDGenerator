@@ -272,7 +272,7 @@ llm:
       # HIGH COMPLEXITY: Scope analysis requires strong reasoning
       # Can use: claude-3-opus, claude-4-opus, claude-5-opus for best results
       provider: "anthropic"
-      model: "claude-3-opus"
+      model: "claude-3-haiku"
       temperature: 0.7
       max_tokens: 4096
       task: "Complex scope analysis and architecture understanding"
@@ -295,7 +295,7 @@ llm:
       name: "Business Rules Extraction Agent"
       # LOW COMPLEXITY: Rule extraction with simple analysis
       provider: "anthropic"
-      model: "claude-3-haiku"
+      model: "claude-3-sonnet"
       temperature: 0.3
       max_tokens: 2048
       task: "Extract business rules from code patterns"
@@ -306,7 +306,7 @@ llm:
       name: "Gap Analysis Agent"
       # LOW COMPLEXITY: Gap identification (checklist comparison)
       provider: "anthropic"
-      model: "claude-3-haiku"
+      model: "claude-3-sonnet"
       temperature: 0.5
       max_tokens: 2048
       task: "Identify gaps by comparing code vs requirements"
@@ -317,7 +317,7 @@ llm:
       name: "Synthesis & Requirements Agent"
       # HIGH COMPLEXITY: Synthesize all data into coherent requirements
       provider: "anthropic"
-      model: "claude-3-opus"
+      model: "claude-3-sonnet"
       temperature: 0.7
       max_tokens: 4096
       task: "Complex synthesis of all BRD components"
@@ -350,7 +350,7 @@ llm:
       name: "BRD Summarizer & Output Agent"
       # HIGH COMPLEXITY: Write professional BRD document
       provider: "anthropic"
-      model: "claude-3-opus"
+      model: "claude-3-sonnet"
       temperature: 0.7
       max_tokens: 8192
       task: "Complex document synthesis and writing"

@@ -8,6 +8,33 @@ import re
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
+# Saturated stroke + dark label so the pastel fills stay legible under both the
+# light and dark Mermaid themes.
+_NODE_STYLES = {
+    "Client":     "fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#0b2530",
+    "Controller": "fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#3b2200",
+    "Service":    "fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#2e1033",
+    "Mapper":     "fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#0f2913",
+    "Repository": "fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#3a0d1d",
+    "Database":   "fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#1a2227",
+}
+
+# Request-processing flowchart: node id -> role, role -> style.
+_FLOW_ROLES = {
+    "A": "entry", "B": "decision", "C": "error", "D": "process",
+    "E": "process", "F": "process", "G": "process", "H": "process",
+    "I": "process", "J": "decision", "K": "error", "L": "error",
+    "M": "success", "N": "success", "O": "endpoint",
+}
+_FLOW_STYLES = {
+    "entry":    "fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#0b2530",
+    "decision": "fill:#fff8e1,stroke:#f9a825,stroke-width:2px,color:#3a2d00",
+    "process":  "fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#2e1033",
+    "error":    "fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#3d0a0a",
+    "success":  "fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#0f2913",
+    "endpoint": "fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#1a2227",
+}
+
 
 class ComprehensiveBRDBuilder:
     """Builds comprehensive BRD markdown with all sections."""
@@ -673,62 +700,70 @@ Error responses follow standard format:
 
         # Generate Mermaid C4 diagram
         mermaid = "```mermaid\ngraph LR\n"
+        nodes = ["Client"]
         mermaid += "    Client[\"👤 Client<br/>HTTP Request\"]\n"
-        
+
         if controllers > 0:
             mermaid += f"    Controller[\"🎯 {controllers} Controller(s)<br/>HTTP Routing\"]\n"
             mermaid += "    Client -->|Request| Controller\n"
+            nodes.append("Controller")
         else:
-            mermaid += "    Client -->|Direct Access| Database\n"
             mermaid += "    Database[(\"🗄️ Database\")]\n"
-        
+            mermaid += "    Client -->|Direct Access| Database\n"
+            nodes.append("Database")
+
         if services > 0 and controllers > 0:
             mermaid += f"    Service[\"⚙️ {services} Service(s)<br/>Business Logic\"]\n"
             mermaid += "    Controller -->|Process| Service\n"
-        
+            nodes.append("Service")
+
         if mappers > 0 and services > 0:
             mermaid += f"    Mapper[\"🔄 {mappers} Mapper(s)<br/>Data Transform\"]\n"
             mermaid += "    Service -->|Transform| Mapper\n"
+            nodes.append("Mapper")
         elif mappers > 0 and controllers > 0:
             mermaid += f"    Mapper[\"🔄 {mappers} Mapper(s)<br/>Data Transform\"]\n"
             mermaid += "    Controller -->|Transform| Mapper\n"
-        
+            nodes.append("Mapper")
+
         if repos > 0:
             mermaid += f"    Repository[\"📊 {repos} Repository/ies<br/>Data Access\"]\n"
-            if mappers > 0:
+            nodes.append("Repository")
+            if "Mapper" in nodes:
                 mermaid += "    Mapper -->|Query| Repository\n"
             elif services > 0:
                 mermaid += "    Service -->|Query| Repository\n"
             elif controllers > 0:
                 mermaid += "    Controller -->|Query| Repository\n"
-        
-        if repos > 0 or controllers > 0:
+
+        if (repos > 0 or controllers > 0) and "Database" not in nodes:
             mermaid += "    Database[(\"🗄️ Database\")]\n"
+            nodes.append("Database")
             if repos > 0:
                 mermaid += "    Repository -->|SQL| Database\n"
                 mermaid += "    Database -->|ResultSet| Repository\n"
             elif controllers > 0 and not (services > 0 or mappers > 0):
                 mermaid += "    Controller -->|SQL| Database\n"
                 mermaid += "    Database -->|ResultSet| Controller\n"
-        
+
         # Response path
-        if repos > 0 and mappers > 0:
+        if repos > 0 and "Mapper" in nodes:
             mermaid += "    Repository -->|Entity| Mapper\n"
             mermaid += "    Mapper -->|DTO| Service\n"
             mermaid += "    Service -->|Result| Controller\n"
         elif repos > 0 and services > 0:
             mermaid += "    Repository -->|Entity| Service\n"
             mermaid += "    Service -->|Result| Controller\n"
-        elif repos > 0:
+        elif repos > 0 and controllers > 0:
             mermaid += "    Repository -->|Data| Controller\n"
-        
-        mermaid += "    Controller -->|JSON| Client\n"
-        mermaid += "    style Client fill:#e1f5ff\n"
-        mermaid += "    style Controller fill:#fff3e0\n"
-        mermaid += "    style Service fill:#f3e5f5\n"
-        mermaid += "    style Mapper fill:#e8f5e9\n"
-        mermaid += "    style Repository fill:#fce4ec\n"
-        mermaid += "    style Database fill:#eceff1\n"
+
+        if controllers > 0:
+            mermaid += "    Controller -->|JSON| Client\n"
+
+        # Light fills need an explicit dark label colour, otherwise Mermaid's
+        # dark theme draws light text on them and nothing is readable.
+        for node in nodes:
+            mermaid += f"    style {node} {_NODE_STYLES[node]}\n"
         mermaid += "```"
 
         return f"""## Data Flow Diagrams
@@ -789,8 +824,11 @@ Based on {repos} detected repositories and {services} detected services:
         repos = patterns.get('Repository', 0)
         entities = patterns.get('Entity', 0)
 
-        # Build dynamic layers based on what's actually in the repo
-        layers = ["Actor", "HTTP"]
+        # Build dynamic layers based on what's actually in the repo.
+        # Names must avoid Mermaid's case-insensitive sequence keywords (actor,
+        # participant, note, loop, alt, opt, par, box, create, destroy, end, …):
+        # a line starting with one is lexed as that keyword, not as a sender.
+        layers = ["Client", "HTTP"]
         if controllers > 0:
             layers.append("Controller")
         if services > 0:
@@ -803,39 +841,36 @@ Based on {repos} detected repositories and {services} detected services:
 
         # Generate Mermaid sequence diagram
         mermaid = "```mermaid\nsequenceDiagram\n"
-        
-        # Add participants based on actual components
+
+        # Every participant must be declared; an undeclared one is a parse error.
         for layer in layers:
-            if layer != "HTTP":
-                mermaid += f"    participant {layer}\n"
-        
-        # Define interactions based on actual architecture
-        mermaid += "    Actor->>HTTP: HTTP Request\n"
-        if controllers > 0:
-            mermaid += "    HTTP->>Controller: Route Request\n"
-            if services > 0:
-                mermaid += "    Controller->>Service: Invoke Business Logic\n"
-                if mappers > 0:
-                    mermaid += "    Service->>Mapper: Transform Data\n"
-                if repos > 0:
-                    mermaid += "    Mapper->>Repository: Query/Persist\n"
-                    mermaid += "    Repository->>Database: Execute SQL\n"
-                    mermaid += "    Database-->>Repository: Result\n"
-                elif repos > 0:
-                    mermaid += "    Service->>Repository: Query/Persist\n"
-                    mermaid += "    Repository->>Database: Execute SQL\n"
-                    mermaid += "    Database-->>Repository: Result\n"
-                else:
-                    mermaid += "    Service-->>Controller: Result\n"
-            else:
-                mermaid += "    Controller->>Database: Direct Access\n"
-                mermaid += "    Database-->>Controller: Result\n"
-            
-            mermaid += "    Controller-->>HTTP: JSON Response\n"
-            mermaid += "    HTTP-->>Actor: HTTP 200 OK\n"
-        else:
-            mermaid += "    HTTP-->>Actor: Response\n"
-        
+            mermaid += f"    participant {layer}\n"
+
+        # Walk consecutive pairs of the detected layers so each message can only
+        # reference components that were actually found in the repo.
+        request_labels = {
+            "HTTP": "HTTP Request",
+            "Controller": "Route Request",
+            "Service": "Invoke Business Logic",
+            "Mapper": "Transform Data",
+            "Repository": "Query/Persist",
+            "Database": "Execute SQL",
+        }
+        for src, dst in zip(layers, layers[1:]):
+            mermaid += f"    {src}->>{dst}: {request_labels[dst]}\n"
+
+        response_labels = {
+            "Repository": "Result",
+            "Mapper": "DTO",
+            "Service": "Entity",
+            "Controller": "Result",
+            "HTTP": "JSON Response",
+            "Client": "HTTP 200 OK",
+        }
+        back = list(reversed(layers))
+        for src, dst in zip(back, back[1:]):
+            mermaid += f"    {src}-->>{dst}: {response_labels[dst]}\n"
+
         mermaid += "```"
 
         return f"""## Sequence Diagrams
@@ -855,7 +890,7 @@ Based on {repos} detected repositories and {services} detected services:
 
 ### Diagram Explanation
 
-1. **Actor** sends HTTP request
+1. **Client** sends HTTP request
 2. **Controller** (if present) routes and validates request
 3. **Service** (if present) executes business logic
 4. **Mapper** (if present) transforms data between layers
@@ -937,6 +972,11 @@ This diagram is generated from your actual repository architecture with {control
         mermaid += "    C --> O[End]\n"
         mermaid += "    L --> O\n"
         mermaid += "    N --> O\n"
+
+        # Which of A-O exist depends on the branches above, so read the node ids
+        # back out rather than styling ones that were never emitted.
+        for node in dict.fromkeys(re.findall(r"\b([A-O])[\[\{]", mermaid)):
+            mermaid += f"    style {node} {_FLOW_STYLES[_FLOW_ROLES[node]]}\n"
         mermaid += "```"
 
         return f"""## Process Diagrams

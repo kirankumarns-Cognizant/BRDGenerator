@@ -259,7 +259,7 @@ def _render_version_info(project_root: Path, graph: dict) -> None:
                 st.caption(f"Showing 10 of {len(versions_list)} versions")
 
         else:
-            st.info("No version history yet. Generate hypergraph to create versions.")
+            st.caption("No version history yet. Generate hypergraph to create versions.")
 
 
 def _build_tech_stack_graph(graph: dict, viewer_dir: Path, project_root: Path = None) -> str:
@@ -372,7 +372,7 @@ def _show_version_modal(project_root: Path, graph: dict) -> None:
     st.subheader("📊 Version History & Comparison")
 
     if not history:
-        st.info("No version history yet.")
+        st.caption("No version history yet.")
         return
 
     # Get current version
@@ -534,10 +534,10 @@ def render(project_root: Path) -> None:
                 ok, msg = _regenerate(project_root)
             if ok:
                 _load_graph.clear()
-                st.success("Hypergraph regenerated.")
+                st.rerun()
             else:
+                # No rerun on failure; it would wipe the error before it can be read.
                 st.error(f"Generation failed:\n{msg}")
-            st.rerun()
 
     with col_version:
         if st.button("📜 Version History", help="View and compare hypergraph versions", use_container_width=True):
