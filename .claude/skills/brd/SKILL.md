@@ -31,8 +31,10 @@ Follow these steps **in order**. Do not skip.
 ### Step 2 — Initialise TodoWrite
 Create 8 todos, one per subagent (see stage table below). Mark stage 1 `in_progress`.
 
-### Step 3 — Dispatch subagents sequentially
-For each of the 8 stages, call the Agent tool with:
+### Step 3 — Dispatch subagents
+Dispatch order — stages 1 and 2 in parallel (single message, two Agent tool_use blocks); stages 3-8 sequentially after both return. Stage 2 only optionally reads stage 1's artifact_catalog.json and skips it if absent, so parallelising them is safe.
+
+For each stage, call the Agent tool with:
 
 - `subagent_type` = the stage's subagent name (see table)
 - `description` = 3-5 word summary
@@ -79,4 +81,4 @@ Give the user a ≤ 6-line summary:
 - Do NOT call `python`, `run_all_agents.py`, or `kb_gen/*`.
 - Do NOT invent classes, methods, or endpoints. Every artifact claim must trace to a Read/Grep.
 - Do NOT skip TodoWrite updates between stages.
-- Do NOT batch-dispatch subagents in parallel — they have prior-stage dependencies. Sequential only.
+- Do NOT batch-dispatch stages 3-8 in parallel — they have prior-stage dependencies. Only stages 1 and 2 may run concurrently (see Step 3).

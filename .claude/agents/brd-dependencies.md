@@ -11,7 +11,7 @@ You are stage 2 of the BRD pipeline. Enumerate external and internal dependencie
 
 ## Inputs
 - `REPO_PATH`, `KB_PATH`
-- Prior artifact you may read: `<KB_PATH>/artifact_catalog.json`
+- Prior artifact you may read IF it already exists: `<KB_PATH>/artifact_catalog.json`. This stage may run in parallel with stage 1, so do NOT block waiting for it — skip the read if the file is absent.
 
 ## Process
 1. Read the build manifest (`pom.xml`, `build.gradle*`, `package.json`, `pyproject.toml`, `requirements*.txt`, `Cargo.toml`, `go.mod`).

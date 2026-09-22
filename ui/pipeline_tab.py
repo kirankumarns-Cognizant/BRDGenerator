@@ -39,6 +39,51 @@ except ImportError:
 
 _MERMAID_BLOCK = re.compile(r"```mermaid[^\S\n]*\n(.*?)```", re.DOTALL)
 
+# Patterns the Python agents emit that we want to lift out of the raw log
+# and surface as "current activity" in the tracker.
+_SUBSTEP_RE = re.compile(r"^\[(\d+)\s*/\s*(\d+)\]\s*(.+)$")
+_ACTIVITY_PREFIXES = (
+    "Repository:", "Output:", "API Available:",
+    "Scanning", "Reading", "Writing", "Generating", "Analyzing",
+    "Enumerating", "Grepping", "Detecting", "Extracting",
+    "Building", "Parsing", "Loading", "Mapping", "Calling",
+    "Fetched", "Wrote", "Found", "Processing",
+)
+_ACTIVITY_TAG_RE = re.compile(r"^\[(INFO|LLM|API|CACHE|CALL|RETRY|WARN|DEBUG)\]\s*(.+)$", re.IGNORECASE)
+
+
+def _classify_log_line(line: str) -> tuple[str | None, str | None]:
+    """Return (activity_text, substep_str) if the line looks like verbose progress.
+    activity_text is a short human phrase for the tracker; substep_str like "3/9"."""
+    stripped = line.strip()
+    if not stripped:
+        return None, None
+
+    m = _SUBSTEP_RE.match(stripped)
+    if m:
+        cur, tot, rest = m.group(1), m.group(2), m.group(3).strip()
+        return rest, f"{cur}/{tot}"
+
+    m = _ACTIVITY_TAG_RE.match(stripped)
+    if m:
+        return m.group(2).strip(), None
+
+    for prefix in _ACTIVITY_PREFIXES:
+        if stripped.startswith(prefix):
+            return stripped, None
+
+    return None, None
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    m, s = divmod(int(seconds), 60)
+    if m < 60:
+        return f"{m}m {s:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h {m:02d}m {s:02d}s"
+
 # Python agent scripts in execution order (LLM-powered versions)
 _AGENT_SCRIPTS = [
     ("Agent 1: Discovery & Scoping",        "agent-1-discovery/agent_1_discovery_llm.py"),
@@ -82,6 +127,7 @@ def _start_pipeline(repo_path: str, project_root: Path) -> None:
     st.session_state._agents_completed = []
     st.session_state._agents_failed = []
     st.session_state._current_agent = None
+    st.session_state._agent_timings = {}
     st.session_state["_run_finalized"] = False
 
     def _run_agents():
@@ -104,12 +150,13 @@ def _start_pipeline(repo_path: str, project_root: Path) -> None:
                 except:
                     pass
             
-            # Send status update via queue with model info
+            # Send status update via queue with model info + start time
             q.put(json.dumps({
                 "__status": "agent_start",
                 "name": name,
                 "index": idx,
-                "model_info": model_info
+                "model_info": model_info,
+                "start_ts": time.time(),
             }))
 
             script_path = skills_root / rel_script
@@ -147,12 +194,13 @@ def _start_pipeline(repo_path: str, project_root: Path) -> None:
                 status = "OK" if proc.returncode == 0 else f"EXIT {proc.returncode}"
                 q.put(f"[{status}] {name}\n")
                 agent_status = "completed" if proc.returncode == 0 else "failed"
-                # Send end status BEFORE sentinel with model info
+                # Send end status BEFORE sentinel with model info + end time
                 q.put(json.dumps({
                     "__status": "agent_end",
                     "name": name,
                     "agent_status": agent_status,
-                    "model_info": model_info
+                    "model_info": model_info,
+                    "end_ts": time.time(),
                 }))
             except Exception as exc:
                 q.put(f"[ERROR] {name}: {exc}\n")
@@ -160,7 +208,8 @@ def _start_pipeline(repo_path: str, project_root: Path) -> None:
                     "__status": "agent_end",
                     "name": name,
                     "agent_status": "error",
-                    "model_info": model_info
+                    "model_info": model_info,
+                    "end_ts": time.time(),
                 }))
 
         q.put(None)  # sentinel
@@ -226,14 +275,31 @@ def _drain_queue() -> bool:
                         "index": msg.get("index"),
                         "name": msg.get("name"),
                         "status": "running",
-                        "model_info": msg.get("model_info")
+                        "model_info": msg.get("model_info"),
+                        "start_ts": msg.get("start_ts") or time.time(),
+                        "activity": "Starting…",
+                        "substep": None,
+                        "recent_activities": [],
+                    }
+                    # Per-agent timings persist across the run so users can see
+                    # which stage was slow after it finishes.
+                    st.session_state.setdefault("_agent_timings", {})[msg.get("name")] = {
+                        "start_ts": msg.get("start_ts") or time.time(),
+                        "end_ts": None,
+                        "status": "running",
                     }
                 elif msg.get("__status") == "agent_end":
                     agent_name = msg.get("name", "")
                     agent_status = msg.get("agent_status", "unknown")
+                    end_ts = msg.get("end_ts") or time.time()
                     if st.session_state._current_agent:
                         st.session_state._current_agent["status"] = agent_status
                         st.session_state._current_agent["model_info"] = msg.get("model_info")
+                        st.session_state._current_agent["end_ts"] = end_ts
+                    timings = st.session_state.setdefault("_agent_timings", {})
+                    entry = timings.setdefault(agent_name, {"start_ts": end_ts})
+                    entry["end_ts"] = end_ts
+                    entry["status"] = agent_status
                     # "completed" here means finished, not succeeded — it drives
                     # the progress bar. Failures are tracked separately so the
                     # final message can be red rather than green.
@@ -255,6 +321,19 @@ def _drain_queue() -> bool:
                         st.session_state._agents_completed.append(agent_name)
                     break
 
+        # Lift verbose progress out of the raw log stream into the tracker.
+        activity, substep = _classify_log_line(text_item)
+        if activity and st.session_state.get("_current_agent"):
+            cur = st.session_state._current_agent
+            cur["activity"] = activity
+            if substep:
+                cur["substep"] = substep
+            recent = cur.setdefault("recent_activities", [])
+            recent.append(activity)
+            # Keep only the last 6 so the panel stays compact.
+            if len(recent) > 6:
+                del recent[: len(recent) - 6]
+
         batch.append(text_item)
 
     if batch:
@@ -275,9 +354,10 @@ def _drain_queue() -> bool:
 
 
 def _render_progress_tracker() -> None:
-    """Display agent progress tracker with completion status and model info."""
+    """Display agent progress tracker with completion status, live activity, and per-agent timings."""
     completed = st.session_state.get("_agents_completed", [])
     current = st.session_state.get("_current_agent")
+    timings = st.session_state.get("_agent_timings", {})
 
     total = len(_AGENT_SCRIPTS)
     completed_count = len(completed)
@@ -309,11 +389,35 @@ def _render_progress_tracker() -> None:
         is_running = current.get("status") == "running"
         label = "Current Agent" if is_running else "Last Agent"
 
+        # Elapsed time for the current/last agent.
+        start_ts = current.get("start_ts")
+        end_ts = current.get("end_ts") or (time.time() if is_running else None)
+        elapsed_str = ""
+        if start_ts and end_ts:
+            elapsed_str = f" · {_fmt_elapsed(end_ts - start_ts)}"
+
         # Display agent and model info
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.caption(f"{status_icon} **{label}:** {agent_name}")
-        
+            substep = current.get("substep")
+            substep_str = f" · step {substep}" if substep else ""
+            st.markdown(
+                f"{status_icon} **{label}:** {agent_name}{substep_str}{elapsed_str}"
+            )
+            activity = current.get("activity")
+            if activity:
+                # Truncate long activity strings to keep the panel tidy.
+                shown = activity if len(activity) <= 140 else activity[:137] + "…"
+                st.caption(f"↳ {shown}")
+
+            recent = current.get("recent_activities") or []
+            # Drop the currently displayed activity so it isn't repeated.
+            history = [a for a in recent if a != activity][-5:]
+            if history:
+                with st.expander("Recent activity", expanded=False):
+                    for a in reversed(history):
+                        st.caption(f"• {a}")
+
         # Display model info if available
         model_info = current.get("model_info")
         if model_info:
@@ -323,7 +427,7 @@ def _render_progress_tracker() -> None:
                     model = model_info.get("model", "N/A")
                     provider = model_info.get("provider", "N/A")
                     complexity = model_info.get("complexity", "N/A")
-                    
+
                     st.caption(f"**Model:** `{model}`")
                     st.caption(f"**Provider:** {provider}")
                     st.caption(f"**Complexity:** {complexity}")
@@ -331,6 +435,26 @@ def _render_progress_tracker() -> None:
         # Add timeout warning if agent has been running too long
         if is_running:
             st.caption("⏱️ *Agent is processing... This may take several minutes with large documents*")
+
+    # Per-agent timing summary — visible during and after the run.
+    if timings:
+        with st.expander(f"Per-agent timings ({len(timings)}/{total})", expanded=False):
+            now = time.time()
+            for name, _ in _AGENT_SCRIPTS:
+                t = timings.get(name)
+                if not t:
+                    continue
+                s = t.get("status", "?")
+                icon = {
+                    "running": "⏳",
+                    "completed": "✅",
+                    "failed": "❌",
+                    "skipped": "⊘",
+                    "error": "⚠️",
+                }.get(s, "•")
+                end = t.get("end_ts") or now
+                start = t.get("start_ts") or end
+                st.caption(f"{icon} {name} — {_fmt_elapsed(end - start)}")
 
 
 def _kb_repo_dir(repo_name: str, project_root: Path) -> Path | None:
