@@ -270,9 +270,21 @@ def render_repo_source(project_root: Path, detect_repos) -> str | None:
     selection always lives in st.session_state.selected_repo.
     """
     st.subheader("Repository")
+
+    # Hide the "Existing repo" mode when there's nothing to pick — leaving it
+    # visible would render an empty dropdown that can't do anything useful.
+    repos = detect_repos(project_root)
+    modes = _MODES if repos else tuple(m for m in _MODES if m != "Existing repo")
+
+    # If the previously chosen mode no longer exists (e.g. Sample_Repos was
+    # cleared between runs), reset before the radio reads the key — otherwise
+    # Streamlit raises on the stale value.
+    if st.session_state.get("_repo_source_mode") not in modes:
+        st.session_state["_repo_source_mode"] = modes[0]
+
     mode = st.radio(
         "Source",
-        _MODES,
+        modes,
         key="_repo_source_mode",
         label_visibility="collapsed",
     )
@@ -287,8 +299,9 @@ def render_repo_source(project_root: Path, detect_repos) -> str | None:
     if acquired:
         st.session_state.selected_repo = acquired
         st.session_state.just_uploaded_repo = True
+        # Refresh detection so a repo acquired this run is pickable immediately.
+        repos = detect_repos(project_root)
 
-    repos = detect_repos(project_root)
     if not repos:
         st.caption("No repositories found yet — upload a .zip or fetch one by URL.")
         st.text_input("Repository name", key="selected_repo")

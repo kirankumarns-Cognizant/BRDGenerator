@@ -113,7 +113,7 @@ with st.sidebar:
     uploaded_repo_name = repo_source.render_repo_source(PROJECT_ROOT, _detect_repos)
 
     # ── Conditional Document Upload ──────────────────────────────────────────────
-    selected_repo = st.session_state.get("selected_repo")    
+    selected_repo = st.session_state.get("selected_repo")
     # If repo selection changed, reset document decision so user is asked again
     previous_repo = st.session_state.get("previous_selected_repo")
     if selected_repo != previous_repo and selected_repo:
@@ -124,6 +124,29 @@ with st.sidebar:
         # into the newly selected repo's KB folder.
         st.session_state.uploaded_documents = []
         st.session_state.previous_selected_repo = selected_repo
+        # If a pipeline is still running for the previous repo, stop it
+        # first — otherwise the background subprocess keeps writing to an
+        # orphaned queue after we clear session state.
+        if st.session_state.get("pipeline_running"):
+            control = st.session_state.get("_pipeline_control")
+            if control:
+                control["stop"].set()
+                proc = control.get("proc")
+                if proc:
+                    try:
+                        proc.terminate()
+                    except Exception:
+                        pass
+            st.session_state.pipeline_running = False
+
+        # Always wipe the right-hand panel — log, tracker, banners, cached
+        # artifact ZIP — so it reflects the newly-selected repo, not the old
+        # one. Unconditional now: a stopped-or-idle run has nothing to keep.
+        try:
+            from ui.pipeline_tab import _reset_run_state
+            _reset_run_state()
+        except Exception:
+            pass
     # Only show document decision buttons if:
     # 1. No decision has been made yet, AND
     # 2. Pipeline is NOT running AND

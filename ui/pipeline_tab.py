@@ -127,13 +127,41 @@ def _utf8_env() -> dict:
     return env
 
 
+def _reset_run_state() -> None:
+    """Wipe every piece of session state that describes a previous run.
+
+    Called at the start of a new pipeline run AND when the user switches
+    repository, so nothing from an old run leaks into a different view."""
+    st.session_state.pipeline_log_lines = []
+    st.session_state._agents_completed = []
+    st.session_state._agents_failed = []
+    st.session_state._current_agent = None
+    st.session_state._agent_timings = {}
+    st.session_state["_run_finalized"] = False
+    # Hypergraph outcome from the previous run.
+    st.session_state["_pending_hypergraph_regen"] = False
+    st.session_state["_hypergraph_regenerated"] = False
+    st.session_state["_hypergraph_regen_ok"] = None
+    st.session_state["_hypergraph_regen_message"] = ""
+    # The queue/control from a prior run can't produce anything for a new one.
+    st.session_state["_pipeline_queue"] = None
+    st.session_state["_pipeline_control"] = None
+    # `_artifacts_zip` is cached by (path, filenames) — same filenames rewritten
+    # with new content would otherwise serve the previous run's bytes.
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+
+
 def _start_pipeline(repo_path: str, project_root: Path) -> None:
     """Run each agent .py script sequentially in a background thread."""
     repo_name = Path(repo_path).name
     kb_output = str(project_root / "KB" / repo_name)
     skills_root = project_root / ".github" / "skills"
-    st.session_state["_pending_hypergraph_regen"] = True
-    st.session_state["_hypergraph_regenerated"] = False
+
+    # Full reset first so no fragment of the previous run stays on screen.
+    _reset_run_state()
 
     q: queue.Queue = queue.Queue()
     # Shared with the worker thread so Stop can reach the live subprocess.
@@ -144,12 +172,8 @@ def _start_pipeline(repo_path: str, project_root: Path) -> None:
     st.session_state._pipeline_queue = q
     st.session_state._pipeline_control = control
     st.session_state.pipeline_running = True
-    st.session_state.pipeline_log_lines = []
-    st.session_state._agents_completed = []
-    st.session_state._agents_failed = []
-    st.session_state._current_agent = None
-    st.session_state._agent_timings = {}
-    st.session_state["_run_finalized"] = False
+    # A regen is expected once this run completes; _reset_run_state cleared it.
+    st.session_state["_pending_hypergraph_regen"] = True
 
     def _run_agents():
         for idx, (name, rel_script) in enumerate(_AGENT_SCRIPTS):
