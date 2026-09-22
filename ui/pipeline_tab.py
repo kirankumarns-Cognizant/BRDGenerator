@@ -47,32 +47,48 @@ _ACTIVITY_PREFIXES = (
     "Scanning", "Reading", "Writing", "Generating", "Analyzing",
     "Enumerating", "Grepping", "Detecting", "Extracting",
     "Building", "Parsing", "Loading", "Mapping", "Calling",
-    "Fetched", "Wrote", "Found", "Processing",
+    "Fetched", "Wrote", "Found", "Processing", "Listing",
+    "Signal scan",
 )
 _ACTIVITY_TAG_RE = re.compile(r"^\[(INFO|LLM|API|CACHE|CALL|RETRY|WARN|DEBUG)\]\s*(.+)$", re.IGNORECASE)
 
+# File-oriented lines the agents emit — surface these as a dedicated
+# "Current target" line so the user always sees a concrete file path.
+_FILE_LINE_RE = re.compile(
+    r"^(?P<verb>Reading|Writing|Wrote|Scanning|Listing):\s*(?P<path>.+)$"
+)
 
-def _classify_log_line(line: str) -> tuple[str | None, str | None]:
-    """Return (activity_text, substep_str) if the line looks like verbose progress.
-    activity_text is a short human phrase for the tracker; substep_str like "3/9"."""
+
+def _classify_log_line(line: str) -> tuple[str | None, str | None, tuple[str, str] | None]:
+    """Return (activity_text, substep_str, file_target).
+
+    activity_text — short human phrase for the tracker.
+    substep_str — like "3/9" when the line was a `[X/Y]` progress marker.
+    file_target — (verb, path) when the line names a file the agent is touching.
+    """
     stripped = line.strip()
     if not stripped:
-        return None, None
+        return None, None, None
+
+    file_target = None
+    m_file = _FILE_LINE_RE.match(stripped)
+    if m_file:
+        file_target = (m_file.group("verb"), m_file.group("path").strip())
 
     m = _SUBSTEP_RE.match(stripped)
     if m:
         cur, tot, rest = m.group(1), m.group(2), m.group(3).strip()
-        return rest, f"{cur}/{tot}"
+        return rest, f"{cur}/{tot}", file_target
 
     m = _ACTIVITY_TAG_RE.match(stripped)
     if m:
-        return m.group(2).strip(), None
+        return m.group(2).strip(), None, file_target
 
     for prefix in _ACTIVITY_PREFIXES:
         if stripped.startswith(prefix):
-            return stripped, None
+            return stripped, None, file_target
 
-    return None, None
+    return None, None, file_target
 
 
 def _fmt_elapsed(seconds: float) -> str:
@@ -322,17 +338,28 @@ def _drain_queue() -> bool:
                     break
 
         # Lift verbose progress out of the raw log stream into the tracker.
-        activity, substep = _classify_log_line(text_item)
-        if activity and st.session_state.get("_current_agent"):
-            cur = st.session_state._current_agent
-            cur["activity"] = activity
+        activity, substep, file_target = _classify_log_line(text_item)
+        cur = st.session_state.get("_current_agent")
+        if cur:
+            if activity:
+                cur["activity"] = activity
+                recent = cur.setdefault("recent_activities", [])
+                recent.append(activity)
+                # Keep only the last 6 so the panel stays compact.
+                if len(recent) > 6:
+                    del recent[: len(recent) - 6]
             if substep:
                 cur["substep"] = substep
-            recent = cur.setdefault("recent_activities", [])
-            recent.append(activity)
-            # Keep only the last 6 so the panel stays compact.
-            if len(recent) > 6:
-                del recent[: len(recent) - 6]
+            if file_target:
+                verb, path = file_target
+                cur["file_verb"] = verb
+                cur["file_path"] = path
+                files_seen = cur.setdefault("files_seen", [])
+                entry = f"{verb}: {path}"
+                if not files_seen or files_seen[-1] != entry:
+                    files_seen.append(entry)
+                if len(files_seen) > 20:
+                    del files_seen[: len(files_seen) - 20]
 
         batch.append(text_item)
 
@@ -409,6 +436,28 @@ def _render_progress_tracker() -> None:
                 # Truncate long activity strings to keep the panel tidy.
                 shown = activity if len(activity) <= 140 else activity[:137] + "…"
                 st.caption(f"↳ {shown}")
+
+            # Dedicated "current file" line — verb + path, e.g. "Writing: KB/.../scope_definition.json".
+            file_verb = current.get("file_verb")
+            file_path = current.get("file_path")
+            if file_verb and file_path:
+                icon = {
+                    "Reading": "📖",
+                    "Scanning": "🔍",
+                    "Listing": "📂",
+                    "Writing": "✍️",
+                    "Wrote": "✅",
+                }.get(file_verb, "📄")
+                # Show the tail if the path is very long, keeps it single-line.
+                shown_path = file_path if len(file_path) <= 90 else "…" + file_path[-87:]
+                st.markdown(f"{icon} **{file_verb}:** `{shown_path}`")
+
+            files_seen = current.get("files_seen") or []
+            if len(files_seen) > 1:
+                with st.expander(f"Files touched ({len(files_seen)})", expanded=False):
+                    # Newest first — most useful when scanning what just happened.
+                    for entry in reversed(files_seen):
+                        st.caption(f"• {entry}")
 
             recent = current.get("recent_activities") or []
             # Drop the currently displayed activity so it isn't repeated.

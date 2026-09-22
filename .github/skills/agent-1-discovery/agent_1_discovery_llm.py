@@ -7,6 +7,7 @@ Produces all 9 Agent 1 outputs: artifact_catalog, dependency_map, scope_definiti
 
 import sys
 import json
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -40,42 +41,52 @@ class LLMDiscoveryAgent:
 
     def run(self) -> Dict[str, Any]:
         """Execute the LLM-powered discovery agent."""
-        print(f"\n{'='*60}")
-        print("Agent 1: LLM-Powered Discovery & Scoping")
-        print(f"{'='*60}")
-        print(f"Repository: {self.repo_path}")
-        print(f"Output: {self.output_path}")
-        print(f"API Available: {self.agent_llm.has_api()}")
+        print(f"\n{'='*60}", flush=True)
+        print("Agent 1: LLM-Powered Discovery & Scoping", flush=True)
+        print(f"{'='*60}", flush=True)
+        print(f"Repository: {self.repo_path}", flush=True)
+        print(f"Output: {self.output_path}", flush=True)
+        print(f"API Available: {self.agent_llm.has_api()}", flush=True)
+
+        # Force a verbose signal scan up front so the tracker shows what the
+        # agent is looking at, instead of just "step 1/9" for minutes.
+        print("\nScanning repository for signals (frameworks, files, deps)...", flush=True)
+        scan_started = time.time()
+        signals_preview = self.signals.get_all_signals(verbose=True)
+        # Cache the result on the RepoSignals instance so each substep reuses it
+        # instead of re-walking the tree.
+        self.signals._cache["all_signals"] = signals_preview
+        print(f"Signal scan complete in {time.time() - scan_started:.1f}s.", flush=True)
 
         outputs = {}
 
         try:
             # Generate each artifact
-            print("\n[1/9] Generating scope_definition.json...")
+            self._announce_step(1, 9, "scope_definition.json", uses_llm=True)
             outputs["scope_definition"] = self._generate_scope_definition()
 
-            print("[2/9] Generating artifact_catalog.json...")
+            self._announce_step(2, 9, "artifact_catalog.json", uses_llm=False)
             outputs["artifact_catalog"] = self._generate_artifact_catalog()
 
-            print("[3/9] Generating dependency_map.json...")
+            self._announce_step(3, 9, "dependency_map.json", uses_llm=False)
             outputs["dependency_map"] = self._generate_dependency_map()
 
-            print("[4/9] Generating business_rules.json...")
+            self._announce_step(4, 9, "business_rules.json", uses_llm=True)
             outputs["business_rules"] = self._generate_business_rules()
 
-            print("[5/9] Generating actors.json...")
+            self._announce_step(5, 9, "actors.json", uses_llm=False)
             outputs["actors"] = self._generate_actors()
 
-            print("[6/9] Generating journey_map.json...")
+            self._announce_step(6, 9, "journey_map.json", uses_llm=False)
             outputs["journey_map"] = self._generate_journey_map()
 
-            print("[7/9] Generating brd_executive_summary.md...")
+            self._announce_step(7, 9, "brd_executive_summary.md", uses_llm=False)
             outputs["brd_executive_summary"] = self._generate_executive_summary()
 
-            print("[8/9] Generating coverage_summary.json...")
+            self._announce_step(8, 9, "coverage_summary.json", uses_llm=False)
             outputs["coverage_summary"] = self._generate_coverage_summary()
 
-            print("[9/9] Generating brd_final.json...")
+            self._announce_step(9, 9, "brd_final.json", uses_llm=False)
             outputs["brd_final"] = self._generate_brd_final()
 
             # Write all outputs
@@ -507,6 +518,13 @@ Generated: {self.timestamp}
             return "DOMAIN_ENTITY"
         return "UNKNOWN"
 
+    def _announce_step(self, idx: int, total: int, output_name: str, uses_llm: bool) -> None:
+        """Emit a `[X/Y]` sub-step line plus a Writing: hint so the frontend
+        can display the target artifact alongside the step counter."""
+        tag = "(LLM call)" if uses_llm else "(local)"
+        print(f"[{idx}/{total}] Generating {output_name} {tag}", flush=True)
+        print(f"Writing: {self.output_path / output_name}", flush=True)
+
     def _write_outputs(self, outputs: Dict[str, Any]):
         """Write all outputs to JSON files."""
         for name, data in outputs.items():
@@ -518,7 +536,8 @@ Generated: {self.timestamp}
                 # JSON file
                 filepath = self.output_path / f"{name}.json"
                 filepath.write_text(json.dumps(data, indent=2))
-            print(f"  [OK] Wrote {filepath.name}")
+            # Absolute path so users can click through in the log block.
+            print(f"Wrote: {filepath}", flush=True)
 
 
 if __name__ == "__main__":

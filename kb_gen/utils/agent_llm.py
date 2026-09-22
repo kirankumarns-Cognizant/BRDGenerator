@@ -6,6 +6,7 @@ Supports multi-provider fallback: Claude API → OpenAI → Gemini → GitHub Co
 
 import os
 import json
+import time
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -145,13 +146,32 @@ class AgentLLM:
                     "\n\nReturn valid JSON when requested. Be thorough, detailed, and ensure all document insights are reflected in the output."
                 )
 
+            # Announce the call so the frontend tracker shows we're waiting on
+            # a network hop, not stuck. Rough context size helps explain slow
+            # responses on large repos.
+            provider = self.provider_info.get("provider", "unknown")
+            ctx_chars = len(full_prompt) + len(system_prompt or "")
+            print(
+                f"Calling LLM (provider={provider}, "
+                f"~{ctx_chars // 4} tokens context, max_tokens={max_tokens})",
+                flush=True,
+            )
+            call_started = time.time()
+
             # Use multi-provider LLM
             response = self.llm.complete(
                 prompt=full_prompt,
                 system_prompt=system_prompt,
                 max_tokens=max_tokens
             )
-            
+
+            elapsed = time.time() - call_started
+            resp_len = len(response) if response else 0
+            print(
+                f"LLM responded in {elapsed:.1f}s ({resp_len} chars)",
+                flush=True,
+            )
+
             return response if response else ""
         except Exception as e:
             # Return error message instead of empty string

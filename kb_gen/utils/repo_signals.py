@@ -290,16 +290,56 @@ class RepoSignals:
 
         return False
 
-    def get_all_signals(self) -> Dict[str, Any]:
-        """Return comprehensive repo signal summary."""
+    def get_all_signals(self, verbose: bool = False) -> Dict[str, Any]:
+        """Return comprehensive repo signal summary.
+
+        When verbose=True, print each scan phase and its result count. The
+        prints stream through to the Streamlit tracker so users can see which
+        step is running instead of a silent multi-minute pause."""
+        def _log(msg: str) -> None:
+            if verbose:
+                print(msg, flush=True)
+
+        _log(f"Scanning: {self.repo_path}")
+        frameworks = self.detect_frameworks()
+        _log(f"  Frameworks detected: {len(frameworks)} — {', '.join(frameworks) or 'none'}")
+
+        _log("Scanning: file statistics (walking repo tree)")
+        file_stats = self.get_file_stats()
+        _log(f"  File types: {len(file_stats)} extensions, {sum(file_stats.values())} files")
+
+        _log("Scanning: lines of code")
+        loc = self.count_lines_of_code()
+        _log(f"  Total LOC: {loc:,}")
+
+        _log("Reading: build manifests (pom.xml / package.json / go.mod / ...)")
+        dependencies = self.extract_dependencies()
+        _log(f"  Dependencies: {sum(len(v) for v in dependencies.values())}")
+
+        _log("Scanning: Java class patterns (Controller/Service/Repository/Entity)")
+        java_class_patterns = self.count_java_classes_by_pattern()
+        _log(f"  Class patterns: {sum(java_class_patterns.values())} classes")
+
+        _log("Scanning: main packages")
+        main_packages = self.get_main_packages()
+        _log(f"  Packages: {len(main_packages)}")
+
+        _log("Scanning: top imports")
+        top_imports = self.extract_imports_summary(10)
+        _log(f"  Distinct top imports: {len(top_imports)}")
+
+        _log("Listing: Java files (first 30)")
+        java_files = self.list_java_files(30)
+        _log(f"  Sample Java files: {len(java_files)}")
+
         return {
             "repo_path": str(self.repo_path),
-            "frameworks": self.detect_frameworks(),
-            "file_stats": self.get_file_stats(),
-            "loc": self.count_lines_of_code(),
-            "dependencies": self.extract_dependencies(),
-            "java_class_patterns": self.count_java_classes_by_pattern(),
-            "main_packages": self.get_main_packages(),
-            "top_imports": self.extract_imports_summary(10),
-            "java_files": self.list_java_files(30),
+            "frameworks": frameworks,
+            "file_stats": file_stats,
+            "loc": loc,
+            "dependencies": dependencies,
+            "java_class_patterns": java_class_patterns,
+            "main_packages": main_packages,
+            "top_imports": top_imports,
+            "java_files": java_files,
         }
