@@ -262,95 +262,97 @@ llm:
           max_tokens: 16000
           best_for: "Simple tasks, cost-effective"
   
-  # Model selection per agent based on task complexity
-  # Each can override provider if needed
-  # Available Claude versions: claude-3-{haiku|sonnet|opus}, claude-3.5-{haiku|sonnet}, claude-4-{haiku|sonnet|opus}, claude-5-{haiku|sonnet|opus}
-  # Available GPT versions: gpt-3.5-turbo, gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini
+  # Model selection per agent based on task complexity.
+  # Real, current-generation Anthropic model IDs (format: claude-<tier>-<gen>):
+  #   claude-opus-5, claude-opus-4-8, claude-sonnet-5, claude-sonnet-4-6, claude-haiku-4-5, claude-fable-5-1
+  # Do NOT use claude-3-*, claude-3.5-*, or `claude-<gen>-<tier>` order — those are invalid IDs.
   models:
     agent1:
       name: "Discovery & Scoping Agent"
-      # HIGH COMPLEXITY: Scope analysis requires strong reasoning
-      # Can use: claude-3-opus, claude-4-opus, claude-5-opus for best results
+      # Discovery is largely signal-to-JSON formatting; Opus is overkill and
+      # output-token generation on Opus (~30-50 tok/s) was dominating latency
+      # (27-52s per LLM call). Sonnet 5 handles this well at ~2x speed.
       provider: "anthropic"
-      model: "claude-3-haiku"
+      model: "claude-sonnet-5"
       temperature: 0.7
-      max_tokens: 4096
-      task: "Complex scope analysis and architecture understanding"
+      max_tokens: 2048
+      task: "Scope analysis and architecture understanding"
       complexity: "HIGH"
       description: "Analyzes repository structure, identifies components, defines scope"
-      
+
     agent2:
       name: "User Journey Mapping Agent"
-      # LOW COMPLEXITY: Pattern matching on code structure
-      # Can use: claude-3-haiku, claude-3.5-haiku, claude-4-opus for best results
+      # LOW COMPLEXITY: Pattern matching on code structure — Haiku is enough.
       provider: "anthropic"
-      model: "claude-3-haiku"
+      model: "claude-haiku-4-5"
       temperature: 0.5
       max_tokens: 2048
       task: "Simple journey mapping from controller patterns"
       complexity: "LOW"
       description: "Maps user workflows through application endpoints"
-      
+
     agent3:
       name: "Business Rules Extraction Agent"
-      # LOW COMPLEXITY: Rule extraction with simple analysis
+      # LOW COMPLEXITY: Rule extraction with simple analysis.
       provider: "anthropic"
-      model: "claude-3-sonnet"
+      model: "claude-haiku-4-5"
       temperature: 0.3
       max_tokens: 2048
       task: "Extract business rules from code patterns"
       complexity: "LOW"
       description: "Identifies business logic and validation rules from code"
-      
+
     agent4:
       name: "Gap Analysis Agent"
-      # LOW COMPLEXITY: Gap identification (checklist comparison)
+      # LOW COMPLEXITY: Gap identification (checklist comparison).
       provider: "anthropic"
-      model: "claude-3-sonnet"
+      model: "claude-haiku-4-5"
       temperature: 0.5
       max_tokens: 2048
       task: "Identify gaps by comparing code vs requirements"
       complexity: "LOW"
       description: "Compares current implementation against requirements"
-      
+
     agent5:
       name: "Synthesis & Requirements Agent"
-      # HIGH COMPLEXITY: Synthesize all data into coherent requirements
+      # HIGH COMPLEXITY: Synthesize all data into coherent requirements.
+      # Opus 5 earns its cost here; this is the reasoning-heavy stage.
       provider: "anthropic"
-      model: "claude-3-sonnet"
+      model: "claude-opus-5"
       temperature: 0.7
       max_tokens: 4096
       task: "Complex synthesis of all BRD components"
       complexity: "HIGH"
       description: "Combines all agent outputs into unified requirement set"
-      
+
     agent6:
       name: "Acceptance Criteria Agent"
-      # LOW COMPLEXITY: Template-based acceptance criteria generation
+      # LOW COMPLEXITY: Template-based acceptance criteria generation.
       provider: "anthropic"
-      model: "claude-3-haiku"
+      model: "claude-haiku-4-5"
       temperature: 0.3
       max_tokens: 1024
       task: "Fill templates for acceptance criteria (Given-When-Then)"
       complexity: "LOW"
       description: "Generates testable acceptance criteria from requirements"
-      
+
     agent7:
       name: "Risk & Dependency Agent"
-      # MEDIUM COMPLEXITY: Risk analysis requires strategic thinking
+      # MEDIUM COMPLEXITY: Risk analysis requires strategic thinking.
       provider: "anthropic"
-      model: "claude-3-sonnet"
+      model: "claude-sonnet-5"
       temperature: 0.6
       max_tokens: 3000
       task: "Analyze risks and identify dependencies"
       complexity: "MEDIUM"
       description: "Identifies technical risks and system dependencies"
-      
+
     agent8:
       name: "BRD Summarizer & Output Agent"
-      # HIGH COMPLEXITY: Write professional BRD document
+      # HIGH COMPLEXITY: Write professional BRD document.
+      # Opus 5 for the final synthesis — this is what users read.
       provider: "anthropic"
-      model: "claude-3-sonnet"
+      model: "claude-opus-5"
       temperature: 0.7
       max_tokens: 8192
       task: "Complex document synthesis and writing"

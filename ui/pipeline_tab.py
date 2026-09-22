@@ -54,9 +54,14 @@ _ACTIVITY_TAG_RE = re.compile(r"^\[(INFO|LLM|API|CACHE|CALL|RETRY|WARN|DEBUG)\]\
 
 # File-oriented lines the agents emit — surface these as a dedicated
 # "Current target" line so the user always sees a concrete file path.
+# `Target:` = the intended output (announced before work starts, no I/O yet).
+# `Writing:`/`Wrote:` = actual disk I/O.
 _FILE_LINE_RE = re.compile(
-    r"^(?P<verb>Reading|Writing|Wrote|Scanning|Listing):\s*(?P<path>.+)$"
+    r"^(?P<verb>Reading|Writing|Wrote|Scanning|Listing|Target):\s*(?P<path>.+)$"
 )
+
+_LLM_CALL_START_RE = re.compile(r"^Calling LLM\b")
+_LLM_CALL_END_RE = re.compile(r"^LLM responded in ([0-9.]+)s")
 
 
 def _classify_log_line(line: str) -> tuple[str | None, str | None, tuple[str, str] | None]:
@@ -354,12 +359,23 @@ def _drain_queue() -> bool:
                 verb, path = file_target
                 cur["file_verb"] = verb
                 cur["file_path"] = path
-                files_seen = cur.setdefault("files_seen", [])
-                entry = f"{verb}: {path}"
-                if not files_seen or files_seen[-1] != entry:
-                    files_seen.append(entry)
-                if len(files_seen) > 20:
-                    del files_seen[: len(files_seen) - 20]
+                # Only record real I/O and scans in "files touched" —
+                # Target: is just an announcement, not an action.
+                if verb != "Target":
+                    files_seen = cur.setdefault("files_seen", [])
+                    entry = f"{verb}: {path}"
+                    if not files_seen or files_seen[-1] != entry:
+                        files_seen.append(entry)
+                    if len(files_seen) > 20:
+                        del files_seen[: len(files_seen) - 20]
+
+            # LLM-call ticker: mark when a call started/ended so the tracker
+            # can show "waiting on LLM for Xs" instead of a static line.
+            if _LLM_CALL_START_RE.match(text_item.strip()):
+                cur["llm_call_start"] = time.time()
+                cur["llm_call_end"] = None
+            elif _LLM_CALL_END_RE.match(text_item.strip()):
+                cur["llm_call_end"] = time.time()
 
         batch.append(text_item)
 
@@ -437,7 +453,9 @@ def _render_progress_tracker() -> None:
                 shown = activity if len(activity) <= 140 else activity[:137] + "…"
                 st.caption(f"↳ {shown}")
 
-            # Dedicated "current file" line — verb + path, e.g. "Writing: KB/.../scope_definition.json".
+            # Dedicated "current file" line — verb + path.
+            # `Target:` means "this is the artifact we're about to build" (not
+            # yet writing). `Writing:` / `Wrote:` mean real disk I/O.
             file_verb = current.get("file_verb")
             file_path = current.get("file_path")
             if file_verb and file_path:
@@ -445,12 +463,26 @@ def _render_progress_tracker() -> None:
                     "Reading": "📖",
                     "Scanning": "🔍",
                     "Listing": "📂",
+                    "Target": "🎯",
                     "Writing": "✍️",
                     "Wrote": "✅",
                 }.get(file_verb, "📄")
                 # Show the tail if the path is very long, keeps it single-line.
                 shown_path = file_path if len(file_path) <= 90 else "…" + file_path[-87:]
                 st.markdown(f"{icon} **{file_verb}:** `{shown_path}`")
+
+            # If an LLM call is in flight, surface it as the real reason for
+            # the wait — a Target: line without this looks like disk hang.
+            llm_start = current.get("llm_call_start")
+            llm_end = current.get("llm_call_end")
+            if llm_start and (llm_end is None or llm_end < llm_start):
+                waited = time.time() - llm_start
+                st.caption(
+                    f"⏳ Waiting on LLM response — {_fmt_elapsed(waited)} so far "
+                    "(this is the network round-trip, not disk I/O)"
+                )
+            elif llm_end and llm_start:
+                st.caption(f"✔ Last LLM call: {_fmt_elapsed(llm_end - llm_start)}")
 
             files_seen = current.get("files_seen") or []
             if len(files_seen) > 1:

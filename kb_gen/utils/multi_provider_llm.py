@@ -299,21 +299,37 @@ class MultiProviderLLM:
         prompt: str,
         system_prompt: Optional[str] = None,
         max_tokens: int = 2000,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        model: Optional[str] = None,
     ) -> str:
-        """Generate completion using active provider."""
+        """Generate completion using active provider.
+
+        `model` is forwarded to adapters that support per-call model
+        selection (currently the Anthropic adapter). Non-supporting
+        adapters ignore it silently."""
         client = self.get_client()
-        
+
         if client is None:
             return ""
-        
+
         try:
-            return client.complete(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
+            # Try passing model first; fall back to signature without model
+            # for adapters that don't accept it yet.
+            try:
+                return client.complete(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    model=model,
+                )
+            except TypeError:
+                return client.complete(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
         except Exception as e:
             print(f"⚠️  Provider error: {e}")
             return ""

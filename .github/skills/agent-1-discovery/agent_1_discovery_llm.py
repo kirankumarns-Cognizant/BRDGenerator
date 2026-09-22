@@ -35,7 +35,7 @@ class LLMDiscoveryAgent:
         self.output_path = Path(output_path) if output_path else Path("KB") / self.repo_name
         self.output_path.mkdir(parents=True, exist_ok=True)
 
-        self.agent_llm = AgentLLM(self.repo_path, api_key, kb_path=self.output_path)
+        self.agent_llm = AgentLLM(self.repo_path, api_key, kb_path=self.output_path, agent_number=1)
         self.signals = self.agent_llm.repo_signals
         self.timestamp = datetime.now().isoformat()
 
@@ -519,11 +519,13 @@ Generated: {self.timestamp}
         return "UNKNOWN"
 
     def _announce_step(self, idx: int, total: int, output_name: str, uses_llm: bool) -> None:
-        """Emit a `[X/Y]` sub-step line plus a Writing: hint so the frontend
-        can display the target artifact alongside the step counter."""
-        tag = "(LLM call)" if uses_llm else "(local)"
+        """Emit a `[X/Y]` sub-step line plus a Target: hint so the frontend
+        can display the target artifact alongside the step counter. This is
+        the intended output; disk I/O happens later in _write_outputs and is
+        announced separately as `Wrote:`."""
+        tag = "(LLM call — this is the slow step)" if uses_llm else "(local, fast)"
         print(f"[{idx}/{total}] Generating {output_name} {tag}", flush=True)
-        print(f"Writing: {self.output_path / output_name}", flush=True)
+        print(f"Target: {self.output_path / output_name}", flush=True)
 
     def _write_outputs(self, outputs: Dict[str, Any]):
         """Write all outputs to JSON files."""

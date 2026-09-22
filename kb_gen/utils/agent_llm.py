@@ -18,10 +18,29 @@ from .document_processor import DocumentProcessor
 class AgentLLM:
     """Wrapper for multi-provider LLM calls with repo context awareness."""
 
-    def __init__(self, repo_path: Path, api_key: Optional[str] = None, kb_path: Optional[Path] = None):
+    def __init__(
+        self,
+        repo_path: Path,
+        api_key: Optional[str] = None,
+        kb_path: Optional[Path] = None,
+        agent_number: Optional[int] = None,
+    ):
         self.repo_path = Path(repo_path)
         self.api_key = api_key
+        self.agent_number = agent_number
         self.repo_signals = RepoSignals(repo_path)
+
+        # Resolve the per-agent model from config so every call sends the
+        # right tier. Falls back to the adapter's DEFAULT_MODEL when the
+        # agent number isn't set or config can't be read.
+        self.model = None
+        if agent_number is not None:
+            try:
+                from config.llm_selector import LLMSelector
+                cfg = LLMSelector.get_model_for_agent(agent_number)
+                self.model = cfg.get("model")
+            except Exception:
+                self.model = None
 
         # Initialize document processor
         if kb_path:
@@ -151,8 +170,9 @@ class AgentLLM:
             # responses on large repos.
             provider = self.provider_info.get("provider", "unknown")
             ctx_chars = len(full_prompt) + len(system_prompt or "")
+            model_tag = self.model or "default"
             print(
-                f"Calling LLM (provider={provider}, "
+                f"Calling LLM (provider={provider}, model={model_tag}, "
                 f"~{ctx_chars // 4} tokens context, max_tokens={max_tokens})",
                 flush=True,
             )
@@ -162,7 +182,8 @@ class AgentLLM:
             response = self.llm.complete(
                 prompt=full_prompt,
                 system_prompt=system_prompt,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                model=self.model,
             )
 
             elapsed = time.time() - call_started
